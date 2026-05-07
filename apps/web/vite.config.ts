@@ -22,13 +22,16 @@ const config = defineConfig({
     ],
   },
   plugins: [
-    devtools(),
-    tailwindcss(),
     tanstackStart(),
     nitro({
       preset: "vercel",
+      renderer: {
+        handler: "src/ssr-renderer.ts",
+      },
     }),
     viteReact(),
+    tailwindcss(),
+    devtools(),
   ],
 });
 
