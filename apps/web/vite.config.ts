@@ -73,7 +73,9 @@ const config = defineConfig({
       },
     },
     tanstackStart(),
-    nitro(),
+    nitro({
+      preset: "vercel",
+    }),
     viteReact(),
   ],
 });
