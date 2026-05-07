@@ -1,0 +1,41 @@
+{
+  "name": "@vasa/extension-table",
+  "version": "0.0.0",
+  "description": "Table node extension for Vasa.",
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "test": "vp test",
+    "check": "vp check",
+    "prepublishOnly": "vp run build"
+  },
+  "dependencies": {
+    "@tiptap/extension-table": "catalog:",
+    "@vasa/canvas": "workspace:*",
+    "@vasa/core": "workspace:*",
+    "@vasa/extension-document": "workspace:*",
+    "@vasa/extension-paragraph": "workspace:*",
+    "@vasa/extension-text": "workspace:*",
+    "@vasa/layout": "workspace:*",
+    "@vasa/pdf": "workspace:*",
+    "@vasa/renderer": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "@typescript/native-preview": "7.0.0-dev.20260328.1",
+    "typescript": "^6.0.2",
+    "vite-plus": "^0.1.14"
+  }
+}

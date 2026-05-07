@@ -1,0 +1,20 @@
+{
+  "name": "vasa",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "ready": "vp fmt && vp lint && vp run test -r && vp run build -r",
+    "dev": "vp run website#dev",
+    "font:add": "node scripts/add-google-font.mjs",
+    "prepare": "vp config"
+  },
+  "devDependencies": {
+    "@vasa/render-test": "workspace:*",
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

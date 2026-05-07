@@ -1,0 +1,36 @@
+{
+  "include": ["**/*.ts", "**/*.tsx"],
+  "compilerOptions": {
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "paths": {
+      "#/*": ["./src/*"],
+      "@/*": ["./src/*"],
+      "@vasa/canvas": ["../../packages/canvas/src/index.ts"],
+      "@vasa/core": ["../../packages/core/src/index.ts"],
+      "@vasa/editor": ["../../packages/editor/src/index.ts"],
+      "@vasa/extension-svg": ["../../packages/extension-svg/src/index.ts"],
+      "@vasa/extension-table": ["../../packages/extension-table/src/index.ts"],
+      "@vasa/layout": ["../../packages/layout/src/index.ts"],
+      "@vasa/pdf": ["../../packages/pdf/src/index.ts"],
+      "@vasa/renderer": ["../../packages/renderer/src/index.ts"]
+    },
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "noEmit": true,
+
+    /* Linting */
+    "skipLibCheck": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
+  }
+}

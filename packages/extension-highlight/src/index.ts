@@ -1,0 +1,89 @@
+import { Mark, type MaybeArray, type VasaExtension, type VasaExtensionRenderers } from "@vasa/core";
+
+type CommandProps = {
+  commands: Record<string, (...args: unknown[]) => boolean>;
+};
+
+export type HighlightExtensionRenderers = {
+  textStyle: (context: { mark: { attrs?: Record<string, unknown> } }) => {
+    backgroundColor: string;
+  };
+};
+
+export type HighlightExtensionOptions = {
+  renderers?: VasaExtensionRenderers<HighlightExtensionRenderers>;
+};
+
+const defaultHighlightRenderers = {
+  textStyle: ({ mark }) => ({
+    backgroundColor: typeof mark.attrs?.color === "string" ? mark.attrs.color : "#fef08a",
+  }),
+} satisfies HighlightExtensionRenderers;
+
+export function createHighlightExtension(
+  options: HighlightExtensionOptions = {},
+): VasaExtension<HighlightExtensionRenderers> {
+  return {
+    name: "highlight",
+    tiptap: createHighlightMark(),
+    renderers: {
+      textStyle: appendRenderer(defaultHighlightRenderers.textStyle, options.renderers?.textStyle),
+    },
+  };
+}
+
+export const Highlight = createHighlightExtension();
+
+function createHighlightMark() {
+  return Mark.create({
+    name: "highlight",
+    addAttributes() {
+      return {
+        color: {
+          default: null,
+          parseHTML: (element) => element.style.backgroundColor || null,
+          renderHTML: (attributes) => ({
+            style: `background-color: ${String(attributes.color ?? "#fef08a")}`,
+          }),
+        },
+      };
+    },
+    parseHTML() {
+      return [{ tag: "mark" }, { style: "background-color" }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["mark", HTMLAttributes, 0];
+    },
+    addCommands() {
+      return {
+        setHighlight:
+          (attrs: Record<string, unknown> = {}) =>
+          ({ commands }: CommandProps) =>
+            commands.setMark(this.name, attrs),
+        toggleHighlight:
+          (attrs: Record<string, unknown> = {}) =>
+          ({ commands }: CommandProps) =>
+            commands.toggleMark(this.name, attrs),
+        unsetHighlight:
+          () =>
+          ({ commands }: CommandProps) =>
+            commands.unsetMark(this.name),
+      };
+    },
+    addKeyboardShortcuts() {
+      return {
+        "Mod-Shift-h": () => highlightCommand(this.editor.commands),
+      };
+    },
+  } as Parameters<typeof Mark.create>[0]);
+}
+
+function highlightCommand(commands: unknown) {
+  const toggleHighlight = (commands as { toggleHighlight?: () => boolean }).toggleHighlight;
+  return toggleHighlight?.() ?? false;
+}
+
+function appendRenderer<T>(defaultRenderer: T, renderer: MaybeArray<T> | undefined): MaybeArray<T> {
+  if (renderer === undefined) return defaultRenderer;
+  return [defaultRenderer, ...(Array.isArray(renderer) ? renderer : [renderer])];
+}
