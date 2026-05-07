@@ -107,6 +107,7 @@ export type PdfRendererExtension = {
 
 export type PdfRenderNodeContext = {
   node: RenderCustomNode;
+  renderNode: (node: RenderNode) => PdfCommand[];
 };
 
 export type PdfRenderResult = {
@@ -409,7 +410,7 @@ function appendPdfCommands(
   }
 
   if (node.kind === "custom") {
-    const extensionCommands = renderCustomNodeWithExtensions(node, options.renderers);
+    const extensionCommands = renderCustomNodeWithExtensions(node, options.renderers, options);
     if (extensionCommands !== undefined) {
       commands.push(...extensionCommands);
       return;
@@ -527,9 +528,20 @@ function snappedTextHorizontalRect(
 function renderCustomNodeWithExtensions(
   node: RenderCustomNode,
   renderers: PdfRendererExtension[] | undefined,
+  options: Pick<
+    PdfRenderOptions,
+    "defaultTextFill" | "outlineText" | "renderers" | "selectableText" | "textMode"
+  >,
 ) {
   for (const renderer of renderers ?? []) {
-    const commands = renderer.toPdfCommands?.({ node });
+    const commands = renderer.toPdfCommands?.({
+      node,
+      renderNode(child) {
+        const commands: PdfCommand[] = [];
+        appendPdfCommands(commands, child, options);
+        return commands;
+      },
+    });
     if (commands !== undefined) return commands;
   }
 

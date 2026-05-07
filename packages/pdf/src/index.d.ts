@@ -8,6 +8,7 @@ import {
 import {
   type RenderDocument,
   type RenderCustomNode,
+  type RenderNode,
   type RenderTextNode,
   type SvgPath,
   type TextOutlineFont,
@@ -103,6 +104,7 @@ export type PdfRendererExtension = {
 };
 export type PdfRenderNodeContext = {
   node: RenderCustomNode;
+  renderNode: (node: RenderNode) => PdfCommand[];
 };
 export type PdfRenderResult = {
   layout: LayoutResult;

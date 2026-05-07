@@ -128,6 +128,7 @@ export type CanvasRenderNodeContext = {
   node: RenderCustomNode;
   yOffset: number;
   options: CanvasRendererOptions;
+  renderNode: (node: RenderNode) => CanvasNode[];
 };
 
 export type CanvasPageSize = {
@@ -694,7 +695,14 @@ function renderCustomNodeWithExtensions(
   options: CanvasRendererOptions,
 ) {
   for (const extension of options.extensions ?? []) {
-    const nodes = extension.toCanvasNodes?.({ node, yOffset, options });
+    const nodes = extension.toCanvasNodes?.({
+      node,
+      yOffset,
+      options,
+      renderNode(child) {
+        return buildCanvasNodesFromRenderNode(child, yOffset, options);
+      },
+    });
     if (nodes !== undefined) return nodes;
   }
 

@@ -1,5 +1,5 @@
 import type { CanvasNode, CanvasRendererExtension } from "@vasa/canvas";
-import type { RenderCustomNode, RenderNode, RenderTextNode } from "@vasa/renderer";
+import type { RenderCustomNode, RenderNode } from "@vasa/renderer";
 import {
   isTableCellNode,
   isTableRenderNode,
@@ -11,14 +11,18 @@ import {
 
 export const tableCanvasRenderer = {
   name: "table",
-  toCanvasNodes({ node, yOffset }) {
+  toCanvasNodes({ node, yOffset, renderNode }) {
     if (!isTableRenderNode(node)) return undefined;
-    return renderCustomNodeToCanvasNodes(node, yOffset);
+    return renderCustomNodeToCanvasNodes(node, yOffset, renderNode);
   },
 } satisfies CanvasRendererExtension;
 
-function renderCustomNodeToCanvasNodes(node: RenderCustomNode, yOffset: number): CanvasNode[] {
-  const children = node.children.flatMap((child) => renderNodeToCanvasNodes(child, yOffset));
+function renderCustomNodeToCanvasNodes(
+  node: RenderCustomNode,
+  yOffset: number,
+  renderNode: (node: RenderNode) => CanvasNode[],
+): CanvasNode[] {
+  const children = node.children.flatMap((child) => renderNode(child));
   if (!isTableCellNode(node)) return children;
 
   return [
@@ -34,39 +38,6 @@ function renderCustomNodeToCanvasNodes(node: RenderCustomNode, yOffset: number):
   ];
 }
 
-function renderNodeToCanvasNodes(node: RenderNode, yOffset: number): CanvasNode[] {
-  if (node.kind === "text") return renderTextNodeToCanvasNodes(node, yOffset);
-  if (node.kind === "custom") return renderCustomNodeToCanvasNodes(node, yOffset);
-  return node.children.flatMap((child) => renderNodeToCanvasNodes(child, yOffset));
-}
-
-function renderTextNodeToCanvasNodes(node: RenderTextNode, yOffset: number): CanvasNode[] {
-  return node.lines.map((line, index) => ({
-    key: `${node.key}:${index}`,
-    kind: "textLine",
-    text: line.text,
-    x: line.x,
-    y: line.y + yOffset,
-    width: line.width,
-    height: line.height,
-    font: canvasFontFromLine(line),
-    fill: line.color ?? "#111111",
-    ...(line.backgroundColor === undefined ? {} : { backgroundColor: line.backgroundColor }),
-    ...(line.textDecorationLine === undefined
-      ? {}
-      : { textDecorationLine: line.textDecorationLine }),
-    ...(line.textDecorationColor === undefined
-      ? {}
-      : { textDecorationColor: line.textDecorationColor }),
-    ...(line.textDecorationOffset === undefined
-      ? {}
-      : { textDecorationOffset: line.textDecorationOffset }),
-    ...(line.textDecorationThickness === undefined
-      ? {}
-      : { textDecorationThickness: line.textDecorationThickness }),
-  }));
-}
-
 function cellFillCanvasNode(node: RenderCustomNode, yOffset: number): CanvasNode[] {
   const fill = tableCellBackground(node);
   if (fill === undefined) return [];
@@ -78,12 +49,4 @@ function cellFillCanvasNode(node: RenderCustomNode, yOffset: number): CanvasNode
       fill,
     },
   ];
-}
-
-function canvasFontFromLine(line: RenderTextNode["lines"][number]) {
-  if (line.font !== undefined) return line.font;
-  const fontSize = line.fontSize ?? line.height;
-  const style = line.fontStyle === undefined ? "" : `${line.fontStyle} `;
-  const weight = line.fontWeight === undefined ? "" : `${line.fontWeight} `;
-  return `${style}${weight}${fontSize}px sans-serif`;
 }
