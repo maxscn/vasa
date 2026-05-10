@@ -2,7 +2,7 @@ import { HorizontalRule } from "@vasa/extension-horizontal-rule";
 import { createSvgNode, SvgExtension } from "@vasa/extension-svg";
 import { TableExtension } from "@vasa/extension-table";
 import type { EditorConfig } from "@vasa/editor";
-import { createStandardFontMetrics, type FontDescriptor, type VasaFont } from "@vasa/font";
+import { arimoFallbackFont, arimoRegularFont, createGoogleFontDescriptors } from "@vasa/font";
 
 export const page = {
   width: 612,
@@ -45,57 +45,16 @@ export const demoSvgNode = createSvgNode({
 export const textCharWidth = 8;
 export const textFontSize = 16;
 export const textLineHeight = 16;
-export const fallbackEditorFont: VasaFont = {
-  id: "arimo",
-  family: "Arimo",
-  displayName: "Arimo",
-  weight: "400",
-  style: "normal",
-  fallbackFamilies: ["Arial", "sans-serif"],
-  cssFamily: "Arimo, Arial, sans-serif",
-  data: { kind: "native", metrics: createStandardFontMetrics({ family: "Arimo" }) },
-};
-
-export const bundledEditorFont: VasaFont = {
-  id: "arimo-400",
-  family: "Arimo",
-  displayName: "Arimo",
-  weight: "400",
-  style: "normal",
-  fallbackFamilies: ["Arial", "sans-serif"],
-  cssFamily: "Arimo, Arial, sans-serif",
-  data: { kind: "native", metrics: createStandardFontMetrics({ family: "Arimo" }) },
-};
-
 export const fontSizeOptions = [12, 14, 16, 18, 22, 28, 36];
-export const googleFontFamilies = [
-  googleFont("Arimo", "arimo/Arimo-Regular.ttf"),
-  googleFont("Arimo", "arimo/Arimo-700.ttf", "700"),
-  googleFont("Inter", "inter/Inter-Regular.ttf"),
-  googleFont("Inter", "inter/Inter-700.ttf", "700"),
-  googleFont("Lora", "lora/Lora-Regular.ttf"),
-  googleFont("Lora", "lora/Lora-700.ttf", "700"),
-  googleFont("Merriweather", "merriweather/Merriweather-Regular.ttf"),
-  googleFont("Merriweather", "merriweather/Merriweather-700.ttf", "700"),
-  googleFont("Montserrat", "montserrat/Montserrat-Regular.ttf"),
-  googleFont("Montserrat", "montserrat/Montserrat-700.ttf", "700"),
-  googleFont("Nunito", "nunito/Nunito-Regular.ttf"),
-  googleFont("Nunito", "nunito/Nunito-700.ttf", "700"),
-  googleFont("Oswald", "oswald/Oswald-Regular.ttf"),
-  googleFont("Oswald", "oswald/Oswald-700.ttf", "700"),
-  googleFont("Playfair Display", "playfairdisplay/PlayfairDisplay-Regular.ttf"),
-  googleFont("Playfair Display", "playfairdisplay/PlayfairDisplay-700.ttf", "700"),
-  googleFont("Roboto", "roboto/Roboto-Regular.ttf"),
-  googleFont("Roboto", "roboto/Roboto-700.ttf", "700"),
-  googleFont("Source Serif 4", "sourceserif4/SourceSerif4-Regular.ttf"),
-  googleFont("Source Serif 4", "sourceserif4/SourceSerif4-700.ttf", "700"),
-  googleFont("Space Grotesk", "spacegrotesk/SpaceGrotesk-Regular.ttf"),
-  googleFont("Space Grotesk", "spacegrotesk/SpaceGrotesk-700.ttf", "700"),
-] satisfies FontDescriptor[];
+export const bundledEditorFontSource = "/__vasa-assets/fonts/google/arimo/Arimo-Regular.ttf";
+export const fallbackEditorFontSource = bundledEditorFontSource;
+export const googleFontFamilies = createGoogleFontDescriptors();
 
 export const editorConfig = {
-  bundledFont: bundledEditorFont,
-  fallbackFont: fallbackEditorFont,
+  bundledFont: arimoRegularFont,
+  bundledFontSource: bundledEditorFontSource,
+  fallbackFont: arimoFallbackFont,
+  fallbackFontSource: fallbackEditorFontSource,
   page,
   pageGap: canvasPageGap,
   textCharWidth,
@@ -109,14 +68,3 @@ export const editorConfig = {
   pageBackground: "#fffdfa",
   textColor: "#1f2937",
 } satisfies EditorConfig;
-
-function googleFont(family: string, file: string, weight = "400"): FontDescriptor {
-  return {
-    id: `${family.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}-${weight}`,
-    family,
-    displayName: family,
-    source: `/__vasa-assets/fonts/google/${file}`,
-    weight,
-    fallbackFamilies: ["Arial", "sans-serif"],
-  };
-}

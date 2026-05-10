@@ -45,6 +45,7 @@
     "@vasa/extension-highlight": "workspace:*",
     "@vasa/extension-horizontal-rule": "workspace:*",
     "@vasa/extension-italic": "workspace:*",
+    "@vasa/extension-line-height": "workspace:*",
     "@vasa/extension-paragraph": "workspace:*",
     "@vasa/extension-strike": "workspace:*",
     "@vasa/extension-subscript": "workspace:*",

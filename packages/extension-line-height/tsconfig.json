@@ -1,8 +1,7 @@
 {
   "compilerOptions": {
     "target": "esnext",
-    "lib": ["es2023", "dom", "dom.iterable"],
-    "jsx": "react-jsx",
+    "lib": ["es2023"],
     "moduleDetection": "force",
     "module": "nodenext",
     "moduleResolution": "nodenext",
@@ -16,13 +15,7 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "paths": {
-      "@vasa/extension-line-height": ["../extension-line-height/src/index.ts"],
-      "@vasa/extension-table": ["../extension-table/src/index.ts"],
-      "@vasa/layout": ["../layout/src/index.ts"],
-      "@vasa/pdf": ["../pdf/src/index.ts"]
-    },
     "skipLibCheck": true
   },
-  "include": ["src", "react"]
+  "include": ["src"]
 }

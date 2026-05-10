@@ -71,6 +71,10 @@ export type FontRegistry = {
   get(id: string): VasaFont | undefined;
 };
 
+export type GoogleFontDescriptorOptions = {
+  basePath?: string;
+};
+
 type FontFaceConstructor = new (
   family: string,
   source: string | ArrayBuffer,
@@ -236,7 +240,7 @@ export function createStandardFontMetrics(
   font: Pick<FontDescriptor, "family" | "fallbackFamilies">,
 ): VasaFontMetrics {
   const family = [font.family, ...(font.fallbackFamilies ?? [])].join(" ").toLowerCase();
-  if (/(courier|mono|menlo|consolas|monaco|ui-monospace)/.test(family)) {
+  if (/(courier|mono|menlo|consolas|monaco)/.test(family)) {
     return { ...STANDARD_MONO_METRICS };
   }
   if (/(times|georgia|garamond|serif)/.test(family) && !/sans-serif/.test(family)) {
@@ -365,6 +369,122 @@ export function createCanvasFontValue(
   options: { fontSize: number },
 ) {
   return `${font.style} ${font.weight} ${formatCssPixels(options.fontSize)} ${font.cssFamily}`;
+}
+
+export const googleFontAssetBasePath = "/__vasa-assets/fonts/google";
+
+export const arimoRegularFont: VasaFont = createNativeFont({
+  id: "arimo-400",
+  family: "Arimo",
+  displayName: "Arimo",
+  weight: "400",
+  fallbackFamilies: ["Arial", "sans-serif"],
+});
+
+export const arimoFallbackFont: VasaFont = {
+  ...arimoRegularFont,
+  id: "arimo",
+};
+
+export function createGoogleFontDescriptor(
+  family: string,
+  file: string,
+  weight = "400",
+  options: GoogleFontDescriptorOptions = {},
+): FontDescriptor {
+  return {
+    id: `${fontIdFromFamily(family, 0)}-${weight}`,
+    family,
+    displayName: family,
+    source: `${options.basePath ?? googleFontAssetBasePath}/${file}`,
+    weight,
+    fallbackFamilies: ["Arial", "sans-serif"],
+  };
+}
+
+export function createGoogleFontDescriptors(options: GoogleFontDescriptorOptions = {}) {
+  return [
+    createGoogleFontDescriptor("Arimo", "arimo/Arimo-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Arimo", "arimo/Arimo-700.ttf", "700", options),
+    createGoogleFontDescriptor("Inter", "inter/Inter-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Inter", "inter/Inter-700.ttf", "700", options),
+    createGoogleFontDescriptor("Lora", "lora/Lora-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Lora", "lora/Lora-700.ttf", "700", options),
+    createGoogleFontDescriptor(
+      "Merriweather",
+      "merriweather/Merriweather-Regular.ttf",
+      "400",
+      options,
+    ),
+    createGoogleFontDescriptor("Merriweather", "merriweather/Merriweather-700.ttf", "700", options),
+    createGoogleFontDescriptor("Montserrat", "montserrat/Montserrat-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Montserrat", "montserrat/Montserrat-700.ttf", "700", options),
+    createGoogleFontDescriptor("Nunito", "nunito/Nunito-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Nunito", "nunito/Nunito-700.ttf", "700", options),
+    createGoogleFontDescriptor("Oswald", "oswald/Oswald-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Oswald", "oswald/Oswald-700.ttf", "700", options),
+    createGoogleFontDescriptor(
+      "Playfair Display",
+      "playfairdisplay/PlayfairDisplay-Regular.ttf",
+      "400",
+      options,
+    ),
+    createGoogleFontDescriptor(
+      "Playfair Display",
+      "playfairdisplay/PlayfairDisplay-700.ttf",
+      "700",
+      options,
+    ),
+    createGoogleFontDescriptor("Roboto", "roboto/Roboto-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Roboto", "roboto/Roboto-700.ttf", "700", options),
+    createGoogleFontDescriptor(
+      "Source Serif 4",
+      "sourceserif4/SourceSerif4-Regular.ttf",
+      "400",
+      options,
+    ),
+    createGoogleFontDescriptor(
+      "Source Serif 4",
+      "sourceserif4/SourceSerif4-700.ttf",
+      "700",
+      options,
+    ),
+    createGoogleFontDescriptor(
+      "Space Grotesk",
+      "spacegrotesk/SpaceGrotesk-Regular.ttf",
+      "400",
+      options,
+    ),
+    createGoogleFontDescriptor(
+      "Space Grotesk",
+      "spacegrotesk/SpaceGrotesk-700.ttf",
+      "700",
+      options,
+    ),
+  ] satisfies FontDescriptor[];
+}
+
+function createNativeFont(
+  descriptor: Required<Pick<FontDescriptor, "id" | "family" | "displayName" | "weight">> &
+    Pick<FontDescriptor, "style" | "fallbackFamilies">,
+): VasaFont {
+  const fallbackFamilies = descriptor.fallbackFamilies ?? ["Arial", "sans-serif"];
+  return {
+    id: descriptor.id,
+    family: descriptor.family,
+    displayName: descriptor.displayName,
+    weight: String(descriptor.weight),
+    style: descriptor.style ?? "normal",
+    fallbackFamilies,
+    cssFamily: createCssFontFamily(descriptor.family, fallbackFamilies),
+    data: {
+      kind: "native",
+      metrics: createStandardFontMetrics({
+        family: descriptor.family,
+        fallbackFamilies,
+      }),
+    },
+  };
 }
 
 async function resolveFontBytes(source: FontSource | undefined): Promise<Uint8Array | undefined> {

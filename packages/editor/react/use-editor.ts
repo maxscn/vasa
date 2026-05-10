@@ -5,7 +5,12 @@ import {
   collectRendererExtensions,
   type VasaExtension,
 } from "@vasa/core";
-import { createCanvasFontValue, type FontDescriptor, type VasaFont } from "@vasa/font";
+import {
+  createCanvasFontValue,
+  type FontDescriptor,
+  type FontSource,
+  type VasaFont,
+} from "@vasa/font";
 import {
   createPageGeometry,
   updatePageMarginGuide,
@@ -48,6 +53,7 @@ import {
   setEditorSessionTextStyle,
   setFontFamily,
   setFontSize,
+  setLineHeight,
   toggleCurrentBlockquote,
   toggleBold,
   toggleEditorSessionMark,
@@ -64,7 +70,9 @@ import { useEditorMovement } from "./use-editor-movement.ts";
 
 export type EditorConfig = {
   bundledFont: VasaFont;
+  bundledFontSource?: FontSource;
   fallbackFont: VasaFont;
+  fallbackFontSource?: FontSource;
   defaultFontId?: string;
   page: LayoutOptions["page"];
   onPageMarginChange?: (margin: ResolvedBoxEdges) => void;
@@ -72,6 +80,7 @@ export type EditorConfig = {
   textCharWidth: number;
   textFontSize: number;
   textLineHeight: number;
+  lineHeightOptions?: number[];
   document?: EditorJson;
   extensions?: Array<
     VasaExtension<{
@@ -94,12 +103,10 @@ export type EditorConfig = {
 };
 
 export type EditorProps = {
-  bundledFontUrl: string;
-  fallbackFontUrl?: string;
   config: EditorConfig;
 };
 
-export function useEditor({ bundledFontUrl, fallbackFontUrl, config }: EditorProps) {
+export function useEditor({ config }: EditorProps) {
   const documentExtensions = config.extensions ?? [];
   const tiptapExtensions = useMemo(
     () => [
@@ -147,9 +154,9 @@ export function useEditor({ bundledFontUrl, fallbackFontUrl, config }: EditorPro
   );
   const editorFonts = useEditorFonts({
     bundledFont: config.bundledFont,
-    bundledFontUrl,
+    bundledFontSource: config.bundledFontSource,
     fallbackFont: config.fallbackFont,
-    fallbackFontUrl,
+    fallbackFontSource: config.fallbackFontSource,
     fontFamilies: editorFontFamilies,
   });
   const [selectedColor, setSelectedColor] = useState(config.initialColor ?? "#2563eb");
@@ -212,6 +219,7 @@ export function useEditor({ bundledFontUrl, fallbackFontUrl, config }: EditorPro
     (currentTextBlock.type === "heading"
       ? editorHeadingTextStyleAttrs(currentTextBlock.attrs).fontSize
       : config.textFontSize);
+  const selectedLineHeight = currentTextStyleAttrs.lineHeight ?? baseLineHeightScale(config);
   const shouldPaintSelection = isEditorInputFocused || isSelectionExpanded(selection);
   const editorRenderContract = useMemo(
     () =>
@@ -343,6 +351,15 @@ export function useEditor({ bundledFontUrl, fallbackFontUrl, config }: EditorPro
     updateEditor((session) =>
       setEditorSessionTextStyle(session, { fontSize }, (doc, currentSelection) =>
         setFontSize(doc, currentSelection, fontSize),
+      ),
+    );
+    focusKeyboardBridge();
+  }
+
+  function updateSelectedLineHeight(lineHeight: number) {
+    updateEditor((session) =>
+      setEditorSessionTextStyle(session, { lineHeight }, (doc, currentSelection) =>
+        setLineHeight(doc, currentSelection, lineHeight),
       ),
     );
     focusKeyboardBridge();
@@ -617,11 +634,13 @@ export function useEditor({ bundledFontUrl, fallbackFontUrl, config }: EditorPro
     selectedColor,
     selectedFontId: selectedRenderFont.id,
     selectedFontSize,
+    selectedLineHeight,
     selection,
     storedMarks,
     selectedBlock: currentTextBlock,
     tiptapEditor,
     fontSizeOptions: config.fontSizeOptions,
+    lineHeightOptions: normalizeLineHeightOptions(config.lineHeightOptions, selectedLineHeight),
     insertHorizontalRule,
     insertBlankTable,
     insertPageBreak,
@@ -639,6 +658,7 @@ export function useEditor({ bundledFontUrl, fallbackFontUrl, config }: EditorPro
     updateSelectedColor,
     updateSelectedFont,
     updateSelectedFontSize,
+    updateSelectedLineHeight,
   };
 }
 
@@ -657,6 +677,16 @@ function canvasPointForEvent(canvas: HTMLCanvasElement, clientX: number, clientY
 
 function pageIndexAtY(y: number, pageHeight: number, pageGap: number) {
   return Math.max(0, Math.floor(y / (pageHeight + pageGap)));
+}
+
+function baseLineHeightScale(config: EditorConfig) {
+  return config.textLineHeight / config.textFontSize;
+}
+
+function normalizeLineHeightOptions(options: number[] | undefined, selectedLineHeight: number) {
+  return [...new Set([...(options ?? []), selectedLineHeight])]
+    .filter((lineHeight) => Number.isFinite(lineHeight) && lineHeight > 0)
+    .sort((left, right) => left - right);
 }
 
 function renderNodeBottomY(node: unknown): number {

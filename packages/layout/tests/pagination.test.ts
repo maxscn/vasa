@@ -130,7 +130,7 @@ test("moves trailing hard-break caret lines once they start past the page bottom
   expect(result.pages[1].boxes[0]?.lines?.map((line) => line.text)).toEqual([""]);
 });
 
-test("keeps trailing empty paragraphs on the current page", () => {
+test("keeps trailing empty paragraphs when their caret starts inside the page", () => {
   const document: BoxNode = {
     type: "box",
     style: { gap: 4 },
@@ -156,8 +156,9 @@ test("keeps trailing empty paragraphs on the current page", () => {
     measurer,
   });
 
-  expect(result.pages).toHaveLength(1);
-  expect(result.pages[0].boxes.map((box) => box.id)).toEqual(["intro", "empty"]);
+  expect(result.pages).toHaveLength(2);
+  expect(result.pages[0].boxes.map((box) => box.id)).toEqual(["intro"]);
+  expect(result.pages[1].boxes.map((box) => box.id)).toEqual(["empty"]);
 });
 
 test("counts marked empty spacers when paginating", () => {
@@ -193,7 +194,7 @@ test("counts marked empty spacers when paginating", () => {
   expect(result.pages[1].boxes.map((box) => box.id)).toEqual(["page-spacer"]);
 });
 
-test("moves trailing empty paragraphs once they start past the page bottom", () => {
+test("moves trailing empty paragraphs once their caret starts past the page bottom", () => {
   const document: BoxNode = {
     type: "box",
     style: { gap: 4 },
@@ -231,9 +232,10 @@ test("moves trailing empty paragraphs once they start past the page bottom", () 
     measurer,
   });
 
-  expect(result.pages).toHaveLength(2);
-  expect(result.pages[0].boxes.map((box) => box.id)).toEqual(["intro", "empty-1"]);
-  expect(result.pages[1].boxes.map((box) => box.id)).toEqual(["empty-2"]);
+  expect(result.pages).toHaveLength(3);
+  expect(result.pages[0].boxes.map((box) => box.id)).toEqual(["intro"]);
+  expect(result.pages[1].boxes.map((box) => box.id)).toEqual(["empty-1"]);
+  expect(result.pages[2].boxes.map((box) => box.id)).toEqual(["empty-2"]);
 });
 
 test("splits overflowing text inside page-level containers", () => {

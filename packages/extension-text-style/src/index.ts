@@ -3,6 +3,7 @@ import { Mark, type MaybeArray, type VasaExtension, type VasaExtensionRenderers 
 export type TextStyleAttributes = {
   fontId?: string;
   fontSize?: number;
+  lineHeight?: number;
   fontWeight?: string;
   fontStyle?: "italic";
   color?: string;
@@ -35,6 +36,7 @@ const defaultTextStyleRenderers = {
     ...(typeof mark.attrs?.fontId === "string" ? { fontId: mark.attrs.fontId } : {}),
     ...(typeof mark.attrs?.fontFamily === "string" ? { fontId: mark.attrs.fontFamily } : {}),
     ...(typeof mark.attrs?.fontSize === "number" ? { fontSize: mark.attrs.fontSize } : {}),
+    ...(typeof mark.attrs?.lineHeight === "number" ? { lineHeight: mark.attrs.lineHeight } : {}),
     ...(typeof mark.attrs?.fontWeight === "string" ? { fontWeight: mark.attrs.fontWeight } : {}),
     ...(mark.attrs?.fontStyle === "italic" ? { fontStyle: mark.attrs.fontStyle } : {}),
     ...(typeof mark.attrs?.color === "string" ? { color: mark.attrs.color } : {}),
@@ -109,6 +111,14 @@ function createTextStyleMark() {
           parseHTML: (element) => parseCssFontSize(element.style.fontSize),
           renderHTML: (attributes) =>
             attributes.fontSize === null ? {} : { style: `font-size: ${attributes.fontSize}px` },
+        },
+        lineHeight: {
+          default: null,
+          parseHTML: (element) => parseCssLineHeight(element.style.lineHeight),
+          renderHTML: (attributes) =>
+            attributes.lineHeight === null
+              ? {}
+              : { style: `line-height: ${attributes.lineHeight}` },
         },
         fontWeight: {
           default: null,
@@ -188,6 +198,7 @@ type HtmlElementLike = {
   style: {
     fontFamily: string;
     fontSize: string;
+    lineHeight: string;
     fontWeight: string;
     fontStyle: string;
     color: string;
@@ -206,6 +217,7 @@ function hasTextStyleAttributes(node: unknown) {
     node.dataset.code === "true" ||
     node.style.fontFamily !== "" ||
     node.style.fontSize !== "" ||
+    node.style.lineHeight !== "" ||
     node.style.fontWeight !== "" ||
     node.style.fontStyle !== "" ||
     node.style.color !== "" ||
@@ -233,6 +245,14 @@ function parseCssFontSize(fontSize: string) {
   const match = /^(\d+(?:\.\d+)?)px$/.exec(fontSize.trim());
   if (match === null) return null;
   return Number(match[1]);
+}
+
+function parseCssLineHeight(lineHeight: string) {
+  const trimmed = lineHeight.trim();
+  if (trimmed.length === 0 || trimmed.endsWith("px")) return null;
+
+  const value = Number(trimmed);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function textDecorationLine(element: HtmlElementLike) {

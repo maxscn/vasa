@@ -9,6 +9,7 @@ import { Heading } from "@vasa/extension-heading";
 import { Highlight } from "@vasa/extension-highlight";
 import { HorizontalRule } from "@vasa/extension-horizontal-rule";
 import { Italic } from "@vasa/extension-italic";
+import { LineHeight } from "@vasa/extension-line-height";
 import { Paragraph } from "@vasa/extension-paragraph";
 import { Strike } from "@vasa/extension-strike";
 import { Subscript } from "@vasa/extension-subscript";
@@ -23,6 +24,7 @@ import type { EditorJson, EditorSelection, EditorSelectionPoint } from "./index.
 export type EditorTextStyleAttributes = {
   fontId?: string;
   fontSize?: number;
+  lineHeight?: number;
   fontWeight?: string;
   fontStyle?: "italic";
   color?: string;
@@ -102,6 +104,7 @@ export { Heading } from "@vasa/extension-heading";
 export { Highlight } from "@vasa/extension-highlight";
 export { HorizontalRule } from "@vasa/extension-horizontal-rule";
 export { Italic } from "@vasa/extension-italic";
+export { LineHeight } from "@vasa/extension-line-height";
 export { Paragraph } from "@vasa/extension-paragraph";
 export { Strike } from "@vasa/extension-strike";
 export { Subscript } from "@vasa/extension-subscript";
@@ -134,6 +137,7 @@ export const defaultEditorExtensions: EditorExtension[] = [
   createEditorExtension(Color),
   createEditorExtension(FontFamily),
   createEditorExtension(FontSize),
+  createEditorExtension(LineHeight),
 ];
 
 export function applyTextStyleToSelection(
@@ -172,6 +176,21 @@ export function unsetFontSize(
   selection: EditorSelection,
 ): { doc: EditorJson; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "unsetFontSize").state;
+}
+
+export function setLineHeight(
+  doc: EditorJson,
+  selection: EditorSelection,
+  lineHeight: number,
+): { doc: EditorJson; selection: EditorSelection } {
+  return runEditorCommand({ doc, selection }, "setLineHeight", lineHeight).state;
+}
+
+export function unsetLineHeight(
+  doc: EditorJson,
+  selection: EditorSelection,
+): { doc: EditorJson; selection: EditorSelection } {
+  return runEditorCommand({ doc, selection }, "unsetLineHeight").state;
 }
 
 export function toggleBold(doc: EditorJson, selection: EditorSelection) {

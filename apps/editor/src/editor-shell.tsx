@@ -16,6 +16,7 @@ import {
   Type,
 } from "lucide-react";
 import type { ResolvedBoxEdges } from "@vasa/layout";
+import { resolvePageMargin } from "@vasa/layout";
 import {
   isToolbarMarkActive,
   toggleCode,
@@ -29,6 +30,7 @@ import {
   useEditorPdf,
   type UseEditorPdfReturn,
   type UseEditorReturn,
+  type EditorConfig,
 } from "@vasa/editor";
 import { createSvgNode, type SvgNode, type SvgPathSpec } from "@vasa/extension-svg";
 import {
@@ -42,10 +44,10 @@ import {
   type ReactNode,
 } from "react";
 import { editorConfig } from "./editor-demo";
+import { SelectField } from "./select-field";
 
 export type EditorShellProps = {
-  bundledFontUrl: string;
-  fallbackFontUrl?: string;
+  config?: EditorConfig;
   pdfWorkerUrl: string;
   showPdfPreview?: boolean;
   showInspector?: boolean;
@@ -84,8 +86,7 @@ const marginPresets = {
 type MarginPresetId = keyof typeof marginPresets;
 
 export function EditorShell({
-  bundledFontUrl,
-  fallbackFontUrl,
+  config: baseConfig = editorConfig,
   pdfWorkerUrl,
   showInspector = false,
   showPagesRail = false,
@@ -95,15 +96,12 @@ export function EditorShell({
   const [marginPreset, setMarginPresetState] = useState<MarginPresetId>("normal");
   const [pagePreset, setPagePreset] = useState<PagePresetId>("a4");
   const [showMarginOutlines, setShowMarginOutlines] = useState(true);
-  const [pageMargin, setPageMargin] = useState<ResolvedBoxEdges>(() => ({
-    top: editorConfig.page.margin.top,
-    right: editorConfig.page.margin.right,
-    bottom: editorConfig.page.margin.bottom,
-    left: editorConfig.page.margin.left,
-  }));
+  const [pageMargin, setPageMargin] = useState<ResolvedBoxEdges>(() =>
+    resolvePageMargin(baseConfig.page.margin),
+  );
   const config = useMemo(
     () => ({
-      ...editorConfig,
+      ...baseConfig,
       page: {
         width: pagePresets[pagePreset].width,
         height: pagePresets[pagePreset].height,
@@ -111,11 +109,11 @@ export function EditorShell({
       },
       onPageMarginChange: setPageMargin,
       showPageMarginGuides: showMarginOutlines,
-      extraChildren: [...(editorConfig.extraChildren ?? []), ...droppedSvgNodes],
+      extraChildren: [...(baseConfig.extraChildren ?? []), ...droppedSvgNodes],
     }),
-    [droppedSvgNodes, pageMargin, pagePreset, showMarginOutlines],
+    [baseConfig, droppedSvgNodes, pageMargin, pagePreset, showMarginOutlines],
   );
-  const editor = useEditor({ bundledFontUrl, fallbackFontUrl, config });
+  const editor = useEditor({ config });
   const pdf = useEditorPdf({
     document: editor.layoutTree,
     page: config.page,
@@ -207,6 +205,7 @@ function Toolbar() {
   const fontSizeOptions = editor.fontSizeOptions.includes(editor.selectedFontSize)
     ? editor.fontSizeOptions
     : [...editor.fontSizeOptions, editor.selectedFontSize].sort((left, right) => left - right);
+  const showLineHeightSelect = editor.lineHeightOptions.length > 1;
 
   return (
     <section className="editor-toolbar" aria-label="Document actions">
@@ -215,49 +214,53 @@ function Toolbar() {
         <h1>vasa.sh</h1>
       </div>
       <div className="toolbar-controls">
-        <label className="font-select-label">
-          <Type size={17} aria-hidden="true" />
-          <select
-            value={selectedFontId}
-            onChange={(event) => editor.updateSelectedFont(event.currentTarget.value)}
-            aria-label="Font family"
-          >
-            {selectableFonts.map((font) => (
-              <option key={font.id} value={font.id}>
-                {font.family}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block-select-label">
-          <Heading1 size={17} aria-hidden="true" />
-          <select
-            value={blockStyle}
-            onChange={(event) =>
-              editor.updateSelectedBlockStyle(
-                event.currentTarget.value as "paragraph" | "heading-1" | "heading-2" | "heading-3",
-              )
-            }
-            aria-label="Block style"
-          >
-            <option value="paragraph">Paragraph</option>
-            <option value="heading-1">Heading 1</option>
-            <option value="heading-2">Heading 2</option>
-            <option value="heading-3">Heading 3</option>
-          </select>
-        </label>
-        <select
-          className="style-select"
-          value={editor.selectedFontSize}
-          onChange={(event) => editor.updateSelectedFontSize(Number(event.currentTarget.value))}
-          aria-label="Font size"
-        >
-          {fontSizeOptions.map((fontSize) => (
-            <option key={fontSize} value={fontSize}>
-              {fontSize}px
-            </option>
-          ))}
-        </select>
+        <SelectField
+          ariaLabel="Font family"
+          className="font-select-field"
+          icon={<Type size={17} aria-hidden="true" />}
+          onValueChange={editor.updateSelectedFont}
+          options={selectableFonts.map((font) => ({ label: font.family, value: font.id }))}
+          value={selectedFontId}
+        />
+        <SelectField
+          ariaLabel="Block style"
+          className="block-select-field"
+          icon={<Heading1 size={17} aria-hidden="true" />}
+          onValueChange={(value) =>
+            editor.updateSelectedBlockStyle(
+              value as "paragraph" | "heading-1" | "heading-2" | "heading-3",
+            )
+          }
+          options={[
+            { label: "Paragraph", value: "paragraph" },
+            { label: "Heading 1", value: "heading-1" },
+            { label: "Heading 2", value: "heading-2" },
+            { label: "Heading 3", value: "heading-3" },
+          ]}
+          value={blockStyle}
+        />
+        <SelectField
+          ariaLabel="Font size"
+          className="style-select-field"
+          value={editor.selectedFontSize.toString()}
+          onValueChange={(value) => editor.updateSelectedFontSize(Number(value))}
+          options={fontSizeOptions.map((fontSize) => ({
+            label: `${fontSize}px`,
+            value: fontSize.toString(),
+          }))}
+        />
+        {showLineHeightSelect ? (
+          <SelectField
+            ariaLabel="Line height"
+            className="line-height-select-field"
+            value={editor.selectedLineHeight.toString()}
+            onValueChange={(value) => editor.updateSelectedLineHeight(Number(value))}
+            options={editor.lineHeightOptions.map((lineHeight) => ({
+              label: formatLineHeight(lineHeight),
+              value: lineHeight.toString(),
+            }))}
+          />
+        ) : null}
         <MarkButton label="Bold" mark="bold" onClick={editor.toggleSelectedBold}>
           B
         </MarkButton>
@@ -387,6 +390,10 @@ function MarkButton({
       {children}
     </button>
   );
+}
+
+function formatLineHeight(lineHeight: number) {
+  return `${Number.isInteger(lineHeight) ? lineHeight.toFixed(0) : lineHeight.toString()}x line`;
 }
 
 function CanvasEditor() {
@@ -606,47 +613,14 @@ function InspectorSelect({
   options: Array<{ label: string; value: string }>;
   value: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const selectedOption = options.find((option) => option.value === value) ?? options[0];
-
   return (
-    <div
+    <SelectField
+      ariaLabel={ariaLabel}
       className="select-field"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-      }}
-    >
-      <button
-        type="button"
-        aria-label={ariaLabel}
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        className="select-trigger"
-        onClick={() => setOpen((currentOpen) => !currentOpen)}
-      >
-        <span>{selectedOption?.label}</span>
-        <ChevronDown size={14} aria-hidden="true" />
-      </button>
-      {open ? (
-        <div className="select-content" role="listbox" aria-label={ariaLabel} tabIndex={-1}>
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              role="option"
-              aria-selected={option.value === value}
-              className="select-item"
-              onClick={() => {
-                onValueChange(option.value);
-                setOpen(false);
-              }}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+      onValueChange={onValueChange}
+      options={options}
+      value={value}
+    />
   );
 }
 

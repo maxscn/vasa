@@ -120,15 +120,7 @@ function splitBoxPrimitive(
     const childBox = box.children[index];
     if (childBox === undefined) return undefined;
 
-    if (!isPastPageBottom(effectiveBoxBottom(childBox), content)) {
-      fittingChildren.push(child);
-      continue;
-    }
-
-    if (
-      !remainingBoxesHaveVisibleContent(box.children.slice(index)) &&
-      !isPastPageBottom(childBox.rect.y, content)
-    ) {
+    if (!isPastPageBottom(effectivePaginationBottom(childBox), content)) {
       fittingChildren.push(child);
       continue;
     }
@@ -204,14 +196,10 @@ function hasVisibleContent(box: LayoutBox): boolean {
   return true;
 }
 
-function remainingBoxesHaveVisibleContent(boxes: LayoutBox[]) {
-  return boxes.some((box) => hasVisibleContent(box));
-}
-
 function effectivePaginationBottom(box: LayoutBox): number {
   if (shouldPreserveEmptyHeight(box)) return box.rect.y + box.rect.height;
 
-  return hasVisibleContent(box) ? effectiveBoxBottom(box) : box.rect.y;
+  return effectiveBoxBottom(box);
 }
 
 function effectiveBoxBottom(box: LayoutBox): number {

@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { generateHTML, generateJSON, getSchema } from "@vasa/core";
 import { createStandardFontMetrics, type VasaFont } from "@vasa/font";
+import { layoutDocument, type LayoutResult } from "@vasa/layout";
 import { expect, test } from "vite-plus/test";
 import { applyEditorKeymap, type EditorKeymapOptions } from "../react/keymap.ts";
 import {
@@ -50,8 +51,10 @@ import {
   selectLineAtPoint,
   selectWordAtPoint,
   setEditorSessionTextStyle,
+  updateEditorSessionSelection,
   setCurrentTextBlockType,
   setFontFamily,
+  setLineHeight,
   splitParagraph,
   setColor,
   trimTrailingInlineWhitespaceSelection,
@@ -71,6 +74,7 @@ import {
   defaultEditorExtensions,
   editorCodeFontId,
   editorHeadingTextStyleAttrs,
+  type EditorSelection,
   type EditorJson,
   type EditorRenderLineDocument,
 } from "../src/index.ts";
@@ -266,14 +270,14 @@ test("aligns code font baselines with the default editor font", () => {
   });
   const monoFont = testFont({
     id: editorCodeFontId,
-    family: "ui-monospace",
-    cssFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-    fallbackFamilies: ["SFMono-Regular", "Menlo", "Consolas", "monospace"],
+    family: "Courier New",
+    cssFamily: '"Courier New", Courier, Menlo, Consolas, monospace',
+    fallbackFamilies: ["Courier", "Menlo", "Consolas", "monospace"],
     data: {
       kind: "native",
       metrics: createStandardFontMetrics({
-        family: "ui-monospace",
-        fallbackFamilies: ["SFMono-Regular", "Menlo", "Consolas", "monospace"],
+        family: "Courier New",
+        fallbackFamilies: ["Courier", "Menlo", "Consolas", "monospace"],
       }),
     },
   });
@@ -317,7 +321,7 @@ test("aligns code font baselines with the default editor font", () => {
       {
         text: "code",
         style: {
-          font: "normal 400 16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          font: 'normal 400 16px "Courier New", Courier, Menlo, Consolas, monospace',
           backgroundColor: "#eef2f7",
         },
       },
@@ -719,6 +723,7 @@ test("parses browser HTML marks into the shared editor JSON model", () => {
         fontId: "serif",
         fontFamily: null,
         fontSize: 18,
+        lineHeight: null,
         fontWeight: null,
         fontStyle: null,
         color: "#2563eb",
@@ -1013,6 +1018,84 @@ test("reports current text font attributes from cursor marks and stored marks", 
   });
 });
 
+test("selection changes clear pending text style toolbar state", () => {
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "Styled",
+            marks: [{ type: "textStyle", attrs: { fontId: "lora", fontSize: 22 } }],
+          },
+          { type: "text", text: " plain" },
+        ],
+      },
+    ],
+  };
+  const session = createEditorSession({
+    doc,
+    selection: { path: [0, 0], offset: 3 },
+  });
+  const pending = setEditorSessionTextStyle(
+    session,
+    { fontSize: 18, lineHeight: 1.5 },
+    (nextDoc) => ({
+      doc: nextDoc,
+      selection: session.selection,
+    }),
+  );
+  const moved = updateEditorSessionSelection(pending, { path: [0, 1], offset: 2 });
+
+  expect(
+    currentEditorTextStyleAttrs(pending.doc, pending.selection, pending.storedMarks),
+  ).toMatchObject({
+    fontId: "lora",
+    fontSize: 18,
+    lineHeight: 1.5,
+  });
+  expect(moved.storedMarks).toEqual([]);
+  expect(currentEditorTextStyleAttrs(moved.doc, moved.selection, moved.storedMarks)).toEqual({});
+});
+
+test("applies line height as a selectable text style", () => {
+  const styled = setLineHeight(
+    editorDoc("Hello Vasa"),
+    {
+      path: [0, 0],
+      offset: 10,
+      anchor: { path: [0, 0], offset: 6 },
+    },
+    1.5,
+  );
+
+  expect(styled.doc.content?.[0]?.content?.[1]?.marks).toEqual([
+    { type: "textStyle", attrs: { lineHeight: 1.5 } },
+  ]);
+  expect(currentEditorTextStyleAttrs(styled.doc, { path: [0, 1], offset: 2 })).toMatchObject({
+    lineHeight: 1.5,
+  });
+});
+
+test("resolves line height multipliers against styled font size", () => {
+  const defaultFont = testFont({
+    id: "arimo",
+    family: "Arimo",
+    cssFamily: "Arimo, Arial, sans-serif",
+  });
+  const style = createEditorRenderResolveTextStyle({
+    fonts: [defaultFont],
+    defaultFontId: defaultFont.id,
+    fallbackFont: defaultFont,
+    fontSize: 16,
+    lineHeight: 16,
+  })({ fontSize: 20, lineHeight: 1.5 });
+
+  expect(style.lineHeight).toBe(30);
+});
+
 test("reports heading level font attributes for toolbar state", () => {
   expect(editorHeadingTextStyleAttrs({ level: 1 })).toEqual({ fontSize: 32, fontWeight: "700" });
   expect(editorHeadingTextStyleAttrs({ level: 3 })).toEqual({ fontSize: 22, fontWeight: "700" });
@@ -1045,6 +1128,30 @@ test("inserts page breaks before an editable block", () => {
     type: "heading",
     attrs: { level: 1 },
   });
+});
+
+test("moves a bottom empty paragraph before typing into it", () => {
+  let session = createEditorSession({
+    doc: editorDoc("Bottom"),
+    selection: { path: [0, 0], offset: "Bottom".length },
+  });
+
+  for (let index = 0; index < 8; index += 1) {
+    session = {
+      ...session,
+      ...splitParagraph(session.doc, session.selection),
+    };
+  }
+
+  const emptyPageIndex = editorLayoutPageIndexForPath(session.doc, session.selection.path);
+  const typedSession = insertTextInEditorSession(session, "t");
+  const typedPageIndex = editorLayoutPageIndexForPath(
+    typedSession.doc,
+    typedSession.selection.path,
+  );
+
+  expect(emptyPageIndex).toBe(1);
+  expect(typedPageIndex).toBe(emptyPageIndex);
 });
 
 test("sets font family through the textStyle mark like Tiptap", () => {
@@ -1979,6 +2086,92 @@ test("simulates arrow cursor movements across text runs and paragraphs", () => {
 
   expect(afterRight).toEqual({ path: [1, 0], offset: 0 });
   expect(afterLeft).toEqual({ path: [0, 1], offset: 1 });
+});
+
+test("moves horizontally by rendered grapheme caret stops", () => {
+  const text = "a🇸🇪b";
+  const doc = editorDoc(text);
+  const renderDocument: EditorRenderLineDocument = {
+    pages: [
+      {
+        index: 0,
+        nodes: [
+          {
+            kind: "text",
+            sourceId: "0.0",
+            text,
+            lines: [renderLine(text, 0, 0, 0)],
+          },
+        ],
+      },
+    ],
+  };
+
+  expect(
+    moveSelectionHorizontally(
+      doc,
+      renderDocument,
+      { path: [0, 0], offset: 1 },
+      {
+        direction: "right",
+        granularity: "character",
+        renderLines: cursorRenderLineOptions,
+      },
+    ),
+  ).toEqual({ path: [0, 0], offset: 5 });
+  expect(
+    moveSelectionHorizontally(
+      doc,
+      renderDocument,
+      { path: [0, 0], offset: 5 },
+      {
+        direction: "left",
+        granularity: "character",
+        renderLines: cursorRenderLineOptions,
+      },
+    ),
+  ).toEqual({ path: [0, 0], offset: 1 });
+});
+
+test("moves horizontally through horizontal rule boundaries", () => {
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Before" }] },
+      { type: "horizontalRule" },
+      { type: "paragraph", content: [{ type: "text", text: "After" }] },
+    ],
+  };
+  const renderDocument: EditorRenderLineDocument = {
+    pages: [
+      {
+        index: 0,
+        nodes: [
+          { kind: "text", sourceId: "0.0", text: "Before", lines: [renderLine("Before", 0, 0)] },
+          {
+            kind: "custom",
+            sourceId: "1",
+            rect: { x: 0, y: 24, width: 120, height: 8 },
+            children: [],
+          },
+          { kind: "text", sourceId: "2.0", text: "After", lines: [renderLine("After", 0, 48)] },
+        ],
+      },
+    ],
+  };
+  const move = (selection: EditorSelection, direction: "left" | "right") =>
+    moveSelectionHorizontally(doc, renderDocument, selection, {
+      direction,
+      granularity: "character",
+      renderLines: cursorRenderLineOptions,
+    });
+
+  expect(move({ path: [2, 0], offset: 0 }, "left")).toEqual({ path: [1], offset: 1 });
+  expect(move({ path: [1], offset: 1 }, "left")).toEqual({ path: [1], offset: 0 });
+  expect(move({ path: [1], offset: 0 }, "left")).toEqual({ path: [0, 0], offset: 6 });
+  expect(move({ path: [0, 0], offset: 6 }, "right")).toEqual({ path: [1], offset: 0 });
+  expect(move({ path: [1], offset: 0 }, "right")).toEqual({ path: [1], offset: 1 });
+  expect(move({ path: [1], offset: 1 }, "right")).toEqual({ path: [2, 0], offset: 0 });
 });
 
 test("keeps wrapped line cursor placement right-affined inside render wrappers", () => {
@@ -3079,6 +3272,45 @@ function editorDoc(text: string): EditorJson {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text }] }],
   };
+}
+
+function editorLayoutPageIndexForPath(doc: EditorJson, path: number[]) {
+  const layout = layoutDocument(
+    createEditorLayoutTree(doc, {
+      rootStyle: { gap: 14 },
+      paragraphStyle: { flexDirection: "column" },
+      textStyle: { lineHeight: 16 },
+    }),
+    {
+      page: { width: 612, height: 246, margin: 0 },
+      measurer: {
+        measureText: (input) => ({
+          width: input.text.length * 8,
+          height: input.lineHeight,
+          lineCount: 1,
+          lines: [{ text: input.text, width: input.text.length * 8, start: 0 }],
+        }),
+      },
+      textGrid: false,
+    },
+  );
+  const sourceId = path.join(".");
+  const page = layout.pages.find((candidate) => layoutPageContainsSourceId(candidate, sourceId));
+
+  return page?.index ?? -1;
+}
+
+function layoutPageContainsSourceId(page: LayoutResult["pages"][number], sourceId: string) {
+  const stack = [...page.boxes];
+
+  while (stack.length > 0) {
+    const box = stack.shift();
+    if (box === undefined) continue;
+    if (box.id === sourceId || sourceId.startsWith(`${box.id}.`)) return true;
+    stack.push(...box.children);
+  }
+
+  return false;
 }
 
 function editorTableDoc(): EditorJson {

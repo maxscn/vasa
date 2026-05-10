@@ -23,6 +23,7 @@ export type LayoutNodePagination = {
 export type BoxNode = {
   type: "box";
   id?: string;
+  pagination?: LayoutNodePagination;
   style?: LayoutStyle;
   children?: LayoutNode[];
 };

@@ -23,6 +23,7 @@
     "@vasa/core": "workspace:*",
     "@vasa/editor": "workspace:*",
     "@vasa/extension-horizontal-rule": "workspace:*",
+    "@vasa/extension-line-height": "workspace:*",
     "@vasa/extension-svg": "workspace:*",
     "@vasa/extension-table": "workspace:*",
     "@vasa/font": "workspace:*",

@@ -1601,7 +1601,16 @@ function normalizeSelectionPoint(
 function previousTextPoint(doc: EditorJson, path: number[]): EditorSelectionPoint | undefined {
   const textPaths = collectTextPaths(doc);
   const currentIndex = textPaths.findIndex((textPath) => comparePaths(textPath, path) === 0);
-  if (currentIndex <= 0) return undefined;
+  if (currentIndex < 0) {
+    const previousPath = textPaths
+      .slice()
+      .reverse()
+      .find((textPath) => comparePaths(textPath, path) < 0);
+    return previousPath === undefined
+      ? undefined
+      : { path: previousPath, offset: getTextAtPath(doc, previousPath).length };
+  }
+  if (currentIndex === 0) return undefined;
 
   const previousPath = textPaths[currentIndex - 1];
   return { path: previousPath, offset: getTextAtPath(doc, previousPath).length };
@@ -1610,7 +1619,11 @@ function previousTextPoint(doc: EditorJson, path: number[]): EditorSelectionPoin
 function nextTextPoint(doc: EditorJson, path: number[]): EditorSelectionPoint | undefined {
   const textPaths = collectTextPaths(doc);
   const currentIndex = textPaths.findIndex((textPath) => comparePaths(textPath, path) === 0);
-  if (currentIndex < 0 || currentIndex >= textPaths.length - 1) return undefined;
+  if (currentIndex < 0) {
+    const nextPath = textPaths.find((textPath) => comparePaths(textPath, path) > 0);
+    return nextPath === undefined ? undefined : { path: nextPath, offset: 0 };
+  }
+  if (currentIndex >= textPaths.length - 1) return undefined;
 
   const nextPath = textPaths[currentIndex + 1];
   return { path: nextPath, offset: 0 };

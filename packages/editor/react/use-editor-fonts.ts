@@ -2,6 +2,7 @@ import {
   createFontRegistry,
   type FontDescriptor,
   type FontRegistry,
+  type FontSource,
   type VasaFont,
 } from "@vasa/font";
 import { useEffect, useMemo, useState } from "react";
@@ -9,9 +10,9 @@ import { registerEditorFonts } from "../src/index.ts";
 
 export type UseEditorFontsOptions = {
   bundledFont: VasaFont;
-  bundledFontUrl: string;
+  bundledFontSource?: FontSource;
   fallbackFont: VasaFont;
-  fallbackFontUrl?: string;
+  fallbackFontSource?: FontSource;
   fontFamilies?: Array<string | FontDescriptor>;
   initialFontId?: string;
   registry?: FontRegistry;
@@ -36,9 +37,9 @@ export function useEditorFonts(options: UseEditorFontsOptions) {
     void registerEditorFonts({
       registry: fontRegistry,
       bundledFont: options.bundledFont,
-      bundledFontSource: options.bundledFontUrl,
+      bundledFontSource: options.bundledFontSource,
       fallbackFont: options.fallbackFont,
-      fallbackFontSource: options.fallbackFontUrl,
+      fallbackFontSource: options.fallbackFontSource,
       fontFamilies: options.fontFamilies,
     })
       .then((nextFonts) => {
@@ -57,9 +58,9 @@ export function useEditorFonts(options: UseEditorFontsOptions) {
   }, [
     fontRegistry,
     options.bundledFont,
-    options.bundledFontUrl,
+    options.bundledFontSource,
     options.fallbackFont,
-    options.fallbackFontUrl,
+    options.fallbackFontSource,
     options.fontFamilies,
   ]);
 

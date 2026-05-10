@@ -29,8 +29,12 @@ const config = defineConfig({
       "@vasa/extension-horizontal-rule": workspacePackage(
         "../../packages/extension-horizontal-rule/src/index.ts",
       ),
+      "@vasa/extension-line-height": workspacePackage(
+        "../../packages/extension-line-height/src/index.ts",
+      ),
       "@vasa/extension-svg": workspacePackage("../../packages/extension-svg/src/index.ts"),
       "@vasa/extension-table": workspacePackage("../../packages/extension-table/src/index.ts"),
+      "@vasa/font": workspacePackage("../../packages/font/src/index.ts"),
       "@vasa/layout": workspacePackage("../../packages/layout/src/index.ts"),
       "@vasa/pdf": workspacePackage("../../packages/pdf/src/index.ts"),
       "@vasa/renderer": workspacePackage("../../packages/renderer/src/index.ts"),

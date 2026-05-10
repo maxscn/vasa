@@ -181,7 +181,10 @@ export function moveSelectionHorizontally(
     return moveSelectionByWord(doc, selection, options.direction);
   }
 
-  return moveSelection(doc, selection, options.direction);
+  return (
+    moveSelectionByRenderedCaretStop(document, selection, options.direction, options.renderLines) ??
+    moveSelection(doc, selection, options.direction)
+  );
 }
 
 export function moveSelectionVertically(
@@ -560,6 +563,111 @@ function moveSelectionByWord(
   while (nextOffset < text.length && !isWordSeparator(text[nextOffset])) nextOffset += 1;
 
   return { path: selection.path, offset: nextOffset };
+}
+
+type RenderedCaretStop = {
+  sourceId: string;
+  startOffset: number;
+  endOffset: number;
+};
+
+function moveSelectionByRenderedCaretStop(
+  document: EditorRenderLineDocument,
+  selection: EditorSelection,
+  direction: "left" | "right",
+  options: EditorRenderLineOptions,
+): EditorSelectionPoint | undefined {
+  const stops = renderVisualTextLines(document, options).flatMap((line) =>
+    line.fragments.flatMap(caretStopsForRenderedLine),
+  );
+  if (stops.length === 0) return undefined;
+
+  const sourceId = pathToSourceId(selection.path);
+  const index =
+    direction === "left"
+      ? findLeftRenderedCaretStopIndex(stops, sourceId, selection.offset)
+      : findRightRenderedCaretStopIndex(stops, sourceId, selection.offset);
+  const stop = index === undefined ? undefined : stops[index];
+  if (stop === undefined) return undefined;
+  if (
+    stop.sourceId !== sourceId &&
+    !areSourceIdsInSameTextParent(sourceId, stop.sourceId) &&
+    !isOffsetInsideRenderedCaretStop(stop, selection.offset)
+  ) {
+    return undefined;
+  }
+
+  return {
+    path: sourceIdToPath(stop.sourceId),
+    offset: direction === "left" ? stop.startOffset : stop.endOffset,
+  };
+}
+
+function areSourceIdsInSameTextParent(left: string, right: string) {
+  const leftParent = sourceIdToPath(left).slice(0, -1);
+  const rightParent = sourceIdToPath(right).slice(0, -1);
+  return comparePaths(leftParent, rightParent) === 0;
+}
+
+function isOffsetInsideRenderedCaretStop(stop: RenderedCaretStop, offset: number) {
+  return offset > stop.startOffset && offset < stop.endOffset;
+}
+
+function findLeftRenderedCaretStopIndex(
+  stops: RenderedCaretStop[],
+  sourceId: string,
+  offset: number,
+) {
+  for (let index = stops.length - 1; index >= 0; index -= 1) {
+    const stop = stops[index];
+    if (stop?.sourceId !== sourceId) continue;
+    if (offset > stop.startOffset && offset <= stop.endOffset) return index;
+    if (offset === stop.startOffset) return index - 1 >= 0 ? index - 1 : undefined;
+  }
+
+  return undefined;
+}
+
+function findRightRenderedCaretStopIndex(
+  stops: RenderedCaretStop[],
+  sourceId: string,
+  offset: number,
+) {
+  for (let index = 0; index < stops.length; index += 1) {
+    const stop = stops[index];
+    if (stop?.sourceId !== sourceId) continue;
+    if (offset >= stop.startOffset && offset < stop.endOffset) return index;
+    if (offset === stop.endOffset) return index + 1 < stops.length ? index + 1 : undefined;
+  }
+
+  return undefined;
+}
+
+function caretStopsForRenderedLine(line: EditorRenderedTextLine): RenderedCaretStop[] {
+  const graphemes = segmentGraphemes(line.text);
+
+  if (graphemes.length === 0) {
+    return [{ sourceId: line.sourceId, startOffset: line.start, endOffset: line.start }];
+  }
+
+  return graphemes.map((grapheme) => ({
+    sourceId: line.sourceId,
+    startOffset: line.start + grapheme.index,
+    endOffset: line.start + grapheme.index + grapheme.text.length,
+  }));
+}
+
+function segmentGraphemes(text: string) {
+  const Segmenter = Intl.Segmenter;
+  if (Segmenter === undefined) {
+    return Array.from(text).map((segment, index) => ({ text: segment, index }));
+  }
+
+  const segmenter = new Segmenter(undefined, { granularity: "grapheme" });
+  return Array.from(segmenter.segment(text), (segment) => ({
+    text: segment.segment,
+    index: segment.index,
+  }));
 }
 
 function moveSelectionToLineEdge(

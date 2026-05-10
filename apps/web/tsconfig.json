@@ -8,6 +8,8 @@
       "#/*": ["./src/*"],
       "@/*": ["./src/*"],
       "@vasa/editor": ["../../packages/editor/src/index.ts"],
+      "@vasa/extension-line-height": ["../../packages/extension-line-height/src/index.ts"],
+      "@vasa/font": ["../../packages/font/src/index.ts"],
       "@vasa/pdf": ["../../packages/pdf/src/index.ts"],
       "@vasa/*": ["../../packages/*/dist/index.d.mts"]
     },

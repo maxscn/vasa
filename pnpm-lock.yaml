@@ -242,6 +242,9 @@ importers:
       '@vasa/extension-horizontal-rule':
         specifier: workspace:*
         version: link:../../packages/extension-horizontal-rule
+      '@vasa/extension-line-height':
+        specifier: workspace:*
+        version: link:../../packages/extension-line-height
       '@vasa/extension-svg':
         specifier: workspace:*
         version: link:../../packages/extension-svg
@@ -422,6 +425,9 @@ importers:
       '@vasa/extension-italic':
         specifier: workspace:*
         version: link:../extension-italic
+      '@vasa/extension-line-height':
+        specifier: workspace:*
+        version: link:../extension-line-height
       '@vasa/extension-paragraph':
         specifier: workspace:*
         version: link:../extension-paragraph
@@ -706,6 +712,28 @@ importers:
       '@vasa/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.2
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260328.1
+        version: 7.0.0-dev.20260328.1
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vite-plus:
+        specifier: ^0.1.14
+        version: 0.1.15(@opentelemetry/api@1.9.0)(@types/node@25.5.2)(esbuild@0.27.3)(happy-dom@20.8.9)(jiti@2.6.1)(jsdom@28.1.0)(typescript@6.0.2)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.5.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.3))(yaml@2.8.3)
+
+  packages/extension-line-height:
+    dependencies:
+      '@vasa/core':
+        specifier: workspace:*
+        version: link:../core
+      '@vasa/extension-text-style':
+        specifier: workspace:*
+        version: link:../extension-text-style
     devDependencies:
       '@types/node':
         specifier: ^25.5.0

@@ -105,9 +105,7 @@ textarea {
   min-width: 0;
 }
 
-.font-select-label,
-.block-select-label,
-.style-select,
+.ui-select,
 .color-control,
 .toggle-action {
   align-items: center;
@@ -119,30 +117,105 @@ textarea {
   height: 38px;
 }
 
-.font-select-label,
-.block-select-label,
+.ui-select,
 .color-control {
   gap: 8px;
-  padding: 0 10px;
 }
 
-.font-select-label select,
-.block-select-label select,
-.style-select {
-  background: #070707;
+.ui-select {
+  min-width: 0;
+  position: relative;
+}
+
+.ui-select-trigger {
+  align-items: center;
+  background: transparent;
   border: 0;
   color: #fff;
+  cursor: pointer;
+  display: flex;
+  gap: 8px;
   font-weight: 650;
+  height: 100%;
+  justify-content: space-between;
   outline: none;
-}
-
-.font-select-label select,
-.block-select-label select {
-  min-width: 132px;
-}
-
-.style-select {
   padding: 0 10px;
+  width: 100%;
+}
+
+.ui-select-trigger > svg:not(.ui-select-chevron) {
+  color: rgb(255 255 255 / 76%);
+  flex: 0 0 auto;
+}
+
+.ui-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-select-chevron {
+  color: rgb(255 255 255 / 62%);
+  flex: 0 0 auto;
+}
+
+.font-select-field,
+.block-select-field {
+  width: 178px;
+}
+
+.style-select-field {
+  width: 82px;
+}
+
+.line-height-select-field {
+  width: 112px;
+}
+
+.ui-select-content {
+  background: #101010;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 5px;
+  box-shadow: 0 18px 44px rgb(0 0 0 / 48%);
+  display: grid;
+  gap: 3px;
+  left: 0;
+  min-width: 100%;
+  padding: 5px;
+  position: absolute;
+  top: calc(100% + 6px);
+  z-index: 30;
+}
+
+.ui-select-item {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  display: grid;
+  font-weight: 650;
+  gap: 7px;
+  grid-template-columns: 14px minmax(0, 1fr);
+  min-height: 34px;
+  padding: 0 9px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ui-select-item:hover,
+.ui-select-item[aria-selected="true"] {
+  background: rgb(255 255 255 / 10%);
+}
+
+.ui-select-check {
+  opacity: 0;
+}
+
+.ui-select-item[aria-selected="true"] .ui-select-check {
+  opacity: 1;
 }
 
 .toggle-action {
@@ -156,9 +229,8 @@ textarea {
 .toggle-action:hover,
 .toggle-action[aria-pressed="true"],
 .color-control:focus-within,
-.font-select-label:focus-within,
-.block-select-label:focus-within,
-.style-select:focus {
+.ui-select:focus-within,
+.ui-select:hover {
   background: rgb(255 255 255 / 10%);
   border-color: rgb(255 255 255 / 24%);
   color: #fff;
@@ -293,7 +365,7 @@ textarea {
   position: relative;
 }
 
-.select-trigger {
+.select-field .ui-select-trigger {
   align-items: center;
   background: transparent;
   border: 0;
@@ -309,39 +381,8 @@ textarea {
   width: 100%;
 }
 
-.select-trigger:focus-visible {
+.ui-select-trigger:focus-visible {
   box-shadow: 0 0 0 2px rgb(96 165 250 / 78%);
-}
-
-.select-content {
-  background: #101010;
-  border: 1px solid rgb(255 255 255 / 16%);
-  border-radius: 5px;
-  box-shadow: 0 18px 44px rgb(0 0 0 / 48%);
-  display: grid;
-  gap: 3px;
-  left: 0;
-  padding: 5px;
-  position: absolute;
-  right: 0;
-  top: calc(100% + 6px);
-  z-index: 20;
-}
-
-.select-item {
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
-  min-height: 34px;
-  padding: 0 9px;
-  text-align: left;
-}
-
-.select-item:hover,
-.select-item[aria-selected="true"] {
-  background: rgb(255 255 255 / 10%);
 }
 
 .switch-field {
@@ -647,9 +688,9 @@ textarea {
 }
 
 @media (max-width: 760px) {
-  .font-select-label select,
-  .block-select-label select {
-    min-width: 92px;
+  .font-select-field,
+  .block-select-field {
+    width: 132px;
   }
 
   .editor-toolbar h1 {

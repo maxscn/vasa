@@ -7,13 +7,13 @@ import {
 } from "@vasa/font";
 import type { TextStyle } from "@vasa/layout";
 
-export const editorCodeFontId = "ui-monospace";
+export const editorCodeFontId = "courier-new";
 
 export const editorCodeFontDescriptor: FontDescriptor = {
   id: editorCodeFontId,
-  family: "ui-monospace",
-  displayName: "UI Monospace",
-  fallbackFamilies: ["SFMono-Regular", "Menlo", "Consolas", "monospace"],
+  family: "Courier New",
+  displayName: "Courier New",
+  fallbackFamilies: ["Courier", "Menlo", "Consolas", "monospace"],
 };
 
 export type EditorFontStyleOptions = {

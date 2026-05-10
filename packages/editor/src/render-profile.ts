@@ -172,10 +172,14 @@ export function createEditorRenderResolveTextStyle(options: EditorRenderProfileO
     const fontWeight = attrs.fontWeight ?? font.weight;
     const fontStyle = attrs.fontStyle ?? font.style;
     const familyFont = fontFaceForStyle(options, font, fontWeight, fontStyle);
+    const lineHeight =
+      attrs.lineHeight === undefined
+        ? Math.ceil(fontSize * (options.lineHeight / options.fontSize))
+        : Math.ceil(fontSize * attrs.lineHeight);
 
     return createEditorTextStyleForFont(familyFont, {
       fontSize,
-      lineHeight: Math.ceil(fontSize * 1.25),
+      lineHeight,
       whiteSpace: options.whiteSpace,
       wordBreak: options.wordBreak,
       color: attrs.color,

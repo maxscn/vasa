@@ -7,11 +7,5 @@ export const Route = createFileRoute("/")({
 });
 
 function Home() {
-  return (
-    <EditorShell
-      bundledFontUrl="/__vasa-assets/fonts/google/arimo/Arimo-Regular.ttf"
-      fallbackFontUrl="/__vasa-assets/fonts/google/arimo/Arimo-Regular.ttf"
-      pdfWorkerUrl={pdfWorkerUrl}
-    />
-  );
+  return <EditorShell pdfWorkerUrl={pdfWorkerUrl} />;
 }

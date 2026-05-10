@@ -69,7 +69,12 @@ export function updateEditorSessionSelection(
   session: EditorSession,
   selection: EditorSelection,
 ): EditorSession {
-  return { ...session, disabledMarks: [], selection: cloneSelection(selection) };
+  return {
+    ...session,
+    disabledMarks: [],
+    storedMarks: [],
+    selection: cloneSelection(selection),
+  };
 }
 
 export function applyEditorSessionMutation(
