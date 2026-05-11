@@ -4,9 +4,11 @@ import { fileURLToPath } from "node:url";
 import {
   createCanvasFontValue,
   createCssFontFamily,
+  createFontItalicSkew,
   createFontRegistry,
   createFontScriptStyle,
   createFontStrikeoutStyle,
+  createFontUnderlineStyle,
   createStandardFontMetrics,
 } from "../src/index.ts";
 
@@ -61,6 +63,9 @@ test("registers font bytes with outline data and metrics", async () => {
     unitsPerEm: 2048,
     ascender: expect.any(Number),
     descender: expect.any(Number),
+    italicAngle: expect.any(Number),
+    underlinePosition: expect.any(Number),
+    underlineThickness: expect.any(Number),
     strikeoutPosition: expect.any(Number),
     strikeoutSize: expect.any(Number),
     subscriptYOffset: expect.any(Number),
@@ -94,42 +99,45 @@ test.each([
     if (font.data.metrics === undefined) throw new Error(`Expected metrics for ${displayName}.`);
 
     const fontSize = 16;
+    const italicSkew = createFontItalicSkew(font);
+    const underline = createFontUnderlineStyle(font, { fontSize });
     const strikeout = createFontStrikeoutStyle(font, { fontSize });
     const subscript = createFontScriptStyle(font, { fontSize, kind: "sub" });
     const superscript = createFontScriptStyle(font, { fontSize, kind: "super" });
     const metrics = font.data.metrics;
     const em = metrics.unitsPerEm;
     const ascenderRatio = metrics.ascender / em;
-    const glyphBoxHeight = ((metrics.ascender - metrics.descender) / em) * fontSize;
-    const strikeCenter = strikeout.offset + strikeout.thickness / 2;
+    const underlineTop =
+      (metrics.ascender / em) * fontSize -
+      ((metrics.underlinePosition ?? -em * 0.1) / em) * fontSize;
+    const strikeoutTop =
+      (metrics.ascender / em) * fontSize -
+      ((metrics.strikeoutPosition ?? em * 0.25) / em) * fontSize;
+    const expectedSubscriptFontSize = ((metrics.subscriptYSize ?? em * 0.5) / em) * fontSize;
+    const expectedSuperscriptFontSize = ((metrics.superscriptYSize ?? em * 0.5) / em) * fontSize;
+    const expectedSubscriptBaselineDelta = ((metrics.subscriptYOffset ?? em * 0.2) / em) * fontSize;
+    const expectedSuperscriptBaselineDelta =
+      -((metrics.superscriptYOffset ?? em * 0.2) / em) * fontSize;
     const subscriptBaselineDelta =
       subscript.baselineShift + ascenderRatio * (subscript.fontSize - fontSize);
     const superscriptBaselineDelta =
       superscript.baselineShift + ascenderRatio * (superscript.fontSize - fontSize);
 
-    expect(strikeout.thickness).toBeGreaterThanOrEqual(1);
-    expect(strikeCenter / glyphBoxHeight).toBeGreaterThan(0.45);
-    expect(strikeCenter / glyphBoxHeight).toBeLessThan(0.65);
-    expect(strikeout.offset).toBeCloseTo(
-      (metrics.ascender / em) * fontSize -
-        ((metrics.strikeoutPosition ?? 0) / em) * fontSize -
-        strikeout.thickness / 2,
-      4,
+    expect(italicSkew).toBe(
+      metrics.italicAngle === undefined || metrics.italicAngle === 0
+        ? undefined
+        : Math.tan((-metrics.italicAngle * Math.PI) / 180),
     );
+    expect(underline.thickness).toBeGreaterThanOrEqual(1);
+    expect(underline.offset).toBeCloseTo(underlineTop, 4);
+    expect(strikeout.thickness).toBeGreaterThanOrEqual(1);
+    expect(strikeout.offset).toBeCloseTo(strikeoutTop, 4);
 
-    expect(subscript.fontSize).toBeGreaterThan(6);
-    expect(subscript.fontSize).toBeLessThan(fontSize);
-    expect(subscriptBaselineDelta).toBeGreaterThan(0);
-    expect(subscriptBaselineDelta).toBeLessThan(fontSize * 0.35);
-    expect(subscriptBaselineDelta).toBeGreaterThanOrEqual(fontSize * 0.25);
-    expect(subscript.baselineShift).toBeGreaterThan(subscriptBaselineDelta);
+    expect(subscript.fontSize).toBeCloseTo(expectedSubscriptFontSize, 4);
+    expect(subscriptBaselineDelta).toBeCloseTo(expectedSubscriptBaselineDelta, 4);
 
-    expect(superscript.fontSize).toBeGreaterThan(6);
-    expect(superscript.fontSize).toBeLessThan(fontSize);
-    expect(superscriptBaselineDelta).toBeLessThan(0);
-    expect(Math.abs(superscriptBaselineDelta)).toBeLessThan(fontSize * 0.6);
-    expect(Math.abs(superscriptBaselineDelta)).toBeGreaterThan(fontSize * 0.35);
-    expect(superscript.baselineShift).toBeGreaterThan(superscriptBaselineDelta);
+    expect(superscript.fontSize).toBeCloseTo(expectedSuperscriptFontSize, 4);
+    expect(superscriptBaselineDelta).toBeCloseTo(expectedSuperscriptBaselineDelta, 4);
   },
 );
 

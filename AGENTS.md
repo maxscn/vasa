@@ -86,3 +86,16 @@ For GitHub Actions, consider using [`voidzero-dev/setup-vp`](https://github.com/
 - [ ] Run `vp install` after pulling remote changes and before getting started.
 - [ ] Run `vp check` and `vp test` to validate changes.
 <!--VITE PLUS END-->
+
+## Learned User Preferences
+
+- Prefer formal/spec-based behavior and tests over visual guessing for text and font rendering issues.
+
+## Learned Workspace Facts
+
+- `@opeinspection/vasa` is the intended tree-shakeable public package; other workspace packages are internal and the main package re-exports what `apps/web` needs.
+- PDF and canvas parity is a core rendering goal, best preserved through shared deterministic text layout and paint data.
+- Text styles that affect metrics or wrapping should resolve before layout/Pretext; canvas/PDF transforms should stay shared paint data or renderer fallbacks.
+- Font mark geometry should use font metadata such as `OS/2` and `post` tables when available for strikethrough, underline, subscript, superscript, and italic.
+- New page breaks in the editor/web should preserve the current font instead of resetting to the default.
+- Native editor behavior belongs in `packages/editor`: text style resolution, mark semantics, default DOM-like editing behavior, font/measurement policy, and canvas/PDF paint resolvers should be package defaults, not reimplemented per app. App packages such as `apps/web` should focus on actual UI composition, configuration, routing, and product-specific shell behavior.

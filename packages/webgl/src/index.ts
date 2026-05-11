@@ -223,15 +223,21 @@ function textDecorationRect(node: CanvasTextLineNode) {
   const horizontal = snappedTextHorizontalRect(node);
   const fontSize = fontSizeFromCanvasTextNode(node);
   const thickness = node.textDecorationThickness ?? Math.max(1, Math.round(fontSize * 0.06));
+  const bounds = node.outline === undefined ? undefined : textOutlinePathBounds(node.outline);
   const fallbackOffset =
     node.textDecorationLine === "line-through"
       ? fontSize * 0.6
       : Math.min(node.height - thickness, fontSize);
+  const hasMetricOffset = node.textDecorationOffset !== undefined;
   const offset = node.textDecorationOffset ?? fallbackOffset;
+  const y =
+    bounds === undefined || node.textDecorationLine === "line-through" || hasMetricOffset
+      ? Math.round(node.y + offset)
+      : Math.max(Math.round(node.y + offset), Math.floor(bounds.y + bounds.height));
 
   return {
     x: horizontal.x,
-    y: Math.round(node.y + offset),
+    y,
     width: horizontal.width,
     height: thickness,
   };

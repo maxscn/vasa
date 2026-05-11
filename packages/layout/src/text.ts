@@ -111,6 +111,7 @@ type InlineMeasuredSegment = {
   text: string;
   start: number;
   width: number;
+  leadingGap?: number;
   style?: TextStyle;
 };
 
@@ -197,6 +198,7 @@ export function inlineMeasuredLinesToVisualLines(
     textLines.length = 0;
 
     for (const segment of line.segments) {
+      x += segment.leadingGap ?? 0;
       textLines.push({
         sourceId: segment.sourceId,
         sourceText: segment.sourceText,
@@ -639,6 +641,7 @@ function trimTrailingInlineWhitespace(line: InlineMeasuredLine, measurer: TextMe
 
 function appendInlineSegment(line: InlineMeasuredLine, segment: InlineMeasuredSegment) {
   const previous = line.segments.at(-1);
+  const leadingGap = inlineStyleBoundaryGap(previous, segment);
 
   if (
     previous !== undefined &&
@@ -650,14 +653,40 @@ function appendInlineSegment(line: InlineMeasuredLine, segment: InlineMeasuredSe
     previous.text += segment.text;
     previous.width += segment.width;
   } else {
-    line.segments.push(segment);
+    line.segments.push(leadingGap === 0 ? segment : { ...segment, leadingGap });
   }
 
-  line.width += segment.width;
+  line.width += leadingGap + segment.width;
 }
 
 function sameInlineStyle(left: TextStyle | undefined, right: TextStyle | undefined) {
   return JSON.stringify(left ?? {}) === JSON.stringify(right ?? {});
+}
+
+function isEmphasizedInlineStyle(style: TextStyle | undefined) {
+  const weight = parseCssFontWeight(style?.font);
+  const numericWeight = Number.parseInt(weight ?? "", 10);
+  return (
+    parseCssFontStyle(style?.font) === "italic" ||
+    parseCssFontStyle(style?.font) === "oblique" ||
+    (Number.isFinite(numericWeight) && numericWeight >= 600) ||
+    weight === "bold" ||
+    weight === "bolder"
+  );
+}
+
+function inlineStyleBoundaryGap(
+  previous: InlineMeasuredSegment | undefined,
+  segment: InlineMeasuredSegment,
+) {
+  if (previous === undefined) return 0;
+  if (!/\s$/u.test(previous.text) || segment.text.trim().length === 0) return 0;
+  if (sameInlineStyle(previous.style, segment.style)) return 0;
+  if (!isEmphasizedInlineStyle(segment.style)) return 0;
+  return Math.max(
+    3,
+    Math.min(4, (parseCssFontSize(segment.style?.font) ?? DEFAULT_LINE_HEIGHT) * 0.25),
+  );
 }
 
 function createTextFragment(node: TextNode, lines: TextLine[]): TextNode {

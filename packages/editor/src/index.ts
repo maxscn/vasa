@@ -852,9 +852,14 @@ export function insertPageSpacerAtDocumentEnd(
 export function insertPageBreakAtDocumentEnd(
   doc: EditorJson,
   height: number,
+  options: InsertPageBreakOptions = {},
 ): { doc: EditorJson; selection: EditorSelection } {
-  return insertPageBreakAtIndex(doc, doc.content?.length ?? 0, height);
+  return insertPageBreakAtIndex(doc, doc.content?.length ?? 0, height, options);
 }
+
+export type InsertPageBreakOptions = {
+  fontId?: string;
+};
 
 function insertPageSpacerAtIndex(
   doc: EditorJson,
@@ -878,18 +883,30 @@ function insertPageBreakAtIndex(
   doc: EditorJson,
   insertIndex: number,
   height: number,
+  options: InsertPageBreakOptions = {},
 ): { doc: EditorJson; selection: EditorSelection } {
   const nextDoc = cloneEditorJson(doc);
   const blocks = [...(nextDoc.content ?? [])];
   const spacerHeight = Math.max(1, Math.ceil(height));
 
-  blocks.splice(insertIndex, 0, createPageSpacerParagraph(spacerHeight), createTextParagraph(""));
+  blocks.splice(
+    insertIndex,
+    0,
+    createPageSpacerParagraph(spacerHeight),
+    createTextParagraph("", pageBreakTextMarks(options)),
+  );
   nextDoc.content = blocks;
 
   return {
     doc: nextDoc,
     selection: { path: [insertIndex + 1, 0], offset: 0 },
   };
+}
+
+function pageBreakTextMarks(options: InsertPageBreakOptions): EditorMarkSpec[] | undefined {
+  return options.fontId === undefined
+    ? undefined
+    : [{ type: "textStyle", attrs: { fontId: options.fontId } }];
 }
 
 function createPageSpacerParagraph(spacerHeight: number): EditorJson {
@@ -2482,8 +2499,8 @@ function hasTextContent(node: EditorJson): boolean {
   return (node.content ?? []).some(hasTextContent);
 }
 
-function createTextParagraph(text: string): EditorJson {
-  return { type: "paragraph", content: [{ type: "text", text }] };
+function createTextParagraph(text: string, marks?: EditorJson["marks"]): EditorJson {
+  return { type: "paragraph", content: [createTextNode(text, marks)] };
 }
 
 function createTextBlockFromContent(source: EditorJson, content: EditorJson[]): EditorJson {

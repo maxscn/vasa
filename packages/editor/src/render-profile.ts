@@ -1,9 +1,4 @@
-import {
-  createCanvasFontValue,
-  createFontScriptStyle,
-  createFontStrikeoutStyle,
-  type VasaFont,
-} from "@vasa/font";
+import type { VasaFont } from "@vasa/font";
 import {
   layoutDocument,
   type AnyLayoutExtension,
@@ -13,61 +8,37 @@ import {
   type TextMeasurer,
   type TextStyle,
 } from "@vasa/layout";
-import { createEditorTextStyleForFont } from "./font.ts";
-import { defaultEditorMarkExtensions, type EditorTextStyleAttributes } from "./font-attributes.ts";
+import type { EditorMarkExtension, EditorTextStyleAttributes } from "./font-attributes.ts";
 import { createEditorLayoutTree, type EditorJson } from "./index.ts";
+import {
+  createEditorRenderTextStyle,
+  createEditorTextStyleResolver,
+  resolveEditorCanvasTextPaint,
+  resolveEditorPdfOutlineText,
+  resolveEditorTextStyle,
+  textStyleAttrsForSourceId as resolveTextStyleAttrsForSourceId,
+  type EditorCanvasTextPaint,
+  type EditorPdfOutlineText,
+  type EditorRenderProfileOptions,
+  type EditorRenderTextNodeSource,
+  type EditorTextBoxSource,
+} from "./style-resolver.ts";
 
-export type EditorRenderProfileOptions = {
-  fonts: VasaFont[];
-  defaultFontId: string;
-  fallbackFont: VasaFont;
-  fontSize: number;
-  lineHeight: number;
-  textColor?: string;
-  whiteSpace?: TextStyle["whiteSpace"];
-  wordBreak?: TextStyle["wordBreak"];
-  italicSkewX?: number;
-  outlinePixelSnap?: number;
-  scriptScale?: number;
-};
-
-export type EditorTextLineSource = {
-  sourceId?: string;
-  font?: string;
-  fontSize?: number;
-  fontWeight?: string;
-  fontStyle?: string;
-  color?: string;
-};
-
-export type EditorCanvasTextPaint = {
-  fill: string;
-  font: string;
-  fontSize: number;
-  outlineFont?: VasaFont["outlineFont"];
-  embolden?: number;
-  pixelSnap?: number;
-  skewX?: number;
-};
-
-export type EditorPdfOutlineText = {
-  font: NonNullable<VasaFont["outlineFont"]>;
-  fontSize: number;
-  fill: string;
-  embolden?: number;
-  pixelSnap?: number;
-  skewX?: number;
-};
-
-type EditorTextBoxSource = {
-  id?: string;
-  lines?: EditorTextLineSource[];
-};
-
-type EditorRenderTextNodeSource = {
-  sourceId?: string;
-  lines: EditorTextLineSource[];
-};
+export {
+  createEditorTextStyleResolver,
+  createEditorRenderTextStyle,
+  resolveEditorCanvasTextPaint,
+  resolveEditorPdfOutlineText,
+  resolveEditorTextStyle,
+  type EditorCanvasTextPaint,
+  type EditorPdfOutlineText,
+  type EditorRenderProfileOptions,
+  type EditorRenderTextNodeSource,
+  type EditorTextBoxSource,
+  type EditorTextLineSource,
+  type EditorTextStylesheet,
+  type EditorTextStylesheetContext,
+} from "./style-resolver.ts";
 
 export type CreateEditorRenderDocumentOptions<TRenderDocument, TRendererExtension = unknown> = {
   doc: EditorJson;
@@ -78,6 +49,7 @@ export type CreateEditorRenderDocumentOptions<TRenderDocument, TRendererExtensio
   paragraphStyle?: BoxNode["style"];
   extraChildren?: LayoutNode[];
   layoutExtensions?: AnyLayoutExtension[];
+  markExtensions?: EditorMarkExtension[];
   rendererExtensions?: TRendererExtension[];
   createRenderDocument: (
     layout: ReturnType<typeof layoutDocument>,
@@ -100,12 +72,17 @@ export function createEditorRenderDocument<TRenderDocument, TRendererExtension =
   options: CreateEditorRenderDocumentOptions<TRenderDocument, TRendererExtension>,
 ): EditorRenderDocumentContract<TRenderDocument> {
   const textStyle = createEditorRenderTextStyle(options.profile);
-  const resolveTextStyle = createEditorRenderResolveTextStyle(options.profile);
+  const styleResolver = createEditorTextStyleResolver({
+    profile: options.profile,
+    doc: options.doc,
+    markExtensions: options.markExtensions,
+  });
   const tree = createEditorLayoutTree(options.doc, {
     rootStyle: options.rootStyle,
     paragraphStyle: options.paragraphStyle,
     textStyle,
-    resolveTextStyle,
+    markExtensions: options.markExtensions,
+    resolveTextStyle: styleResolver.resolveTextStyle,
   });
   const layoutTree =
     options.extraChildren === undefined || options.extraChildren.length === 0
@@ -125,76 +102,13 @@ export function createEditorRenderDocument<TRenderDocument, TRendererExtension =
     layoutTree,
     layout,
     renderDocument,
-    canvasTextPaint: (box, lineIndex) =>
-      createEditorCanvasTextPaint(options.doc, options.profile, box, lineIndex),
-    pdfOutlineText: (node, lineIndex) =>
-      createEditorPdfOutlineText(options.doc, options.profile, node, lineIndex),
+    canvasTextPaint: styleResolver.canvasTextPaint,
+    pdfOutlineText: styleResolver.pdfOutlineText,
   };
-}
-
-export function createEditorRenderTextStyle(options: EditorRenderProfileOptions): TextStyle {
-  return createEditorTextStyleForFont(editorRenderDefaultFont(options), {
-    fontSize: options.fontSize,
-    lineHeight: options.lineHeight,
-    whiteSpace: options.whiteSpace,
-    wordBreak: options.wordBreak,
-    color: options.textColor,
-  });
 }
 
 export function createEditorRenderResolveTextStyle(options: EditorRenderProfileOptions) {
-  return (attrs: EditorTextStyleAttributes): TextStyle => {
-    const font =
-      attrs.fontId === undefined
-        ? editorRenderDefaultFont(options)
-        : fontById(options, attrs.fontId);
-    const fontSizeBase = attrs.fontSize ?? options.fontSize;
-    const fontSize =
-      attrs.verticalAlign === "sub" || attrs.verticalAlign === "super"
-        ? createFontScriptStyle(font, {
-            fontSize: fontSizeBase,
-            kind: attrs.verticalAlign,
-            fallbackScale: options.scriptScale,
-          }).fontSize
-        : fontSizeBase;
-    const scriptBaselineShift =
-      attrs.verticalAlign === "sub" || attrs.verticalAlign === "super"
-        ? createFontScriptStyle(font, {
-            fontSize: fontSizeBase,
-            kind: attrs.verticalAlign,
-            fallbackScale: options.scriptScale,
-          }).baselineShift
-        : undefined;
-    const baselineShift =
-      scriptBaselineShift ??
-      mixedFontBaselineShift(editorRenderDefaultFont(options), font, fontSizeBase);
-    const strikeout =
-      attrs.textDecorationLine === "line-through"
-        ? createFontStrikeoutStyle(font, { fontSize })
-        : undefined;
-    const fontWeight = attrs.fontWeight ?? font.weight;
-    const fontStyle = attrs.fontStyle ?? font.style;
-    const familyFont = fontFaceForStyle(options, font, fontWeight, fontStyle);
-    const lineHeight =
-      attrs.lineHeight === undefined
-        ? Math.ceil(fontSize * (options.lineHeight / options.fontSize))
-        : Math.ceil(fontSize * attrs.lineHeight);
-
-    return createEditorTextStyleForFont(familyFont, {
-      fontSize,
-      lineHeight,
-      whiteSpace: options.whiteSpace,
-      wordBreak: options.wordBreak,
-      color: attrs.color,
-      backgroundColor: attrs.backgroundColor,
-      textDecorationLine: attrs.textDecorationLine,
-      textDecorationColor: attrs.textDecorationColor,
-      textDecorationOffset: strikeout?.offset,
-      textDecorationThickness: strikeout?.thickness,
-      verticalAlign: attrs.verticalAlign,
-      baselineShift,
-    });
-  };
+  return (attrs: EditorTextStyleAttributes): TextStyle => resolveEditorTextStyle(options, attrs);
 }
 
 export function createEditorCanvasTextPaint(
@@ -205,24 +119,7 @@ export function createEditorCanvasTextPaint(
 ): EditorCanvasTextPaint {
   const line = box.lines?.[lineIndex];
   const attrs = textStyleAttrsForSourceId(doc, line?.sourceId ?? box.id);
-  const font =
-    attrs.fontId === undefined ? editorRenderDefaultFont(options) : fontById(options, attrs.fontId);
-  const fontSize = line?.fontSize ?? attrs.fontSize ?? options.fontSize;
-  const fontWeight = line?.fontWeight ?? attrs.fontWeight ?? font.weight;
-  const fontStyle = line?.fontStyle ?? attrs.fontStyle ?? font.style;
-  const familyFont = fontFaceForStyle(options, font, fontWeight, fontStyle);
-
-  return {
-    fill: line?.color ?? attrs.color ?? options.textColor ?? "#111111",
-    font:
-      line?.font ??
-      createCanvasFontValue({ ...familyFont, weight: fontWeight, style: fontStyle }, { fontSize }),
-    fontSize,
-    outlineFont: familyFont.outlineFont,
-    embolden: fauxBoldOffset(fontWeight, familyFont.weight, fontSize),
-    pixelSnap: options.outlinePixelSnap,
-    skewX: isItalicFontStyle(fontStyle) ? (options.italicSkewX ?? 0.35) : undefined,
-  };
+  return resolveEditorCanvasTextPaint(options, attrs, line);
 }
 
 export function createEditorPdfOutlineText(
@@ -233,41 +130,14 @@ export function createEditorPdfOutlineText(
 ): EditorPdfOutlineText | undefined {
   const line = node.lines[lineIndex];
   const attrs = textStyleAttrsForSourceId(doc, line?.sourceId ?? node.sourceId);
-  const font =
-    attrs.fontId === undefined ? editorRenderDefaultFont(options) : fontById(options, attrs.fontId);
-
-  const fontSize = line?.fontSize ?? attrs.fontSize ?? options.fontSize;
-  const fontWeight = line?.fontWeight ?? attrs.fontWeight ?? font.weight;
-  const fontStyle = line?.fontStyle ?? attrs.fontStyle ?? font.style;
-  const familyFont = fontFaceForStyle(options, font, fontWeight, fontStyle);
-  if (familyFont.outlineFont === undefined) return undefined;
-
-  return {
-    font: familyFont.outlineFont,
-    fontSize,
-    fill: line?.color ?? attrs.color ?? options.textColor ?? "#111111",
-    embolden: fauxBoldOffset(fontWeight, familyFont.weight, fontSize),
-    pixelSnap: options.outlinePixelSnap,
-    skewX: isItalicFontStyle(fontStyle) ? (options.italicSkewX ?? 0.35) : undefined,
-  };
+  return resolveEditorPdfOutlineText(options, attrs, line);
 }
 
 export function textStyleAttrsForSourceId(
   doc: EditorJson,
   sourceId: string | undefined,
 ): EditorTextStyleAttributes {
-  const node = getEditorNodeAtSourceId(doc, sourceId);
-
-  return (node?.marks ?? []).reduce<EditorTextStyleAttributes>((attrs, mark) => {
-    const renderer = defaultEditorMarkExtensions.find((extension) => extension.name === mark.type)
-      ?.renderers?.textStyle;
-    const renderers = renderer === undefined ? [] : Array.isArray(renderer) ? renderer : [renderer];
-
-    return renderers.reduce<EditorTextStyleAttributes>(
-      (nextAttrs, render) => ({ ...nextAttrs, ...render({ mark }) }),
-      attrs,
-    );
-  }, {});
+  return resolveTextStyleAttrsForSourceId(doc, sourceId);
 }
 
 export function createEditorCanvasTextMeasurer(
@@ -354,43 +224,30 @@ function fontById(options: EditorRenderProfileOptions, fontId: string) {
   return options.fonts.find((font) => font.id === fontId) ?? options.fallbackFont;
 }
 
-function fontFaceForStyle(
-  options: EditorRenderProfileOptions,
-  font: VasaFont,
-  weight: string,
-  style: string,
-) {
-  return (
-    options.fonts.find(
-      (candidate) =>
-        candidate.family === font.family &&
-        candidate.weight === weight &&
-        candidate.style === style,
-    ) ?? { ...font, weight, style }
-  );
-}
-
-function mixedFontBaselineShift(referenceFont: VasaFont, font: VasaFont, fontSize: number) {
-  if (font.id === referenceFont.id) return undefined;
-
-  const referenceAscent = ascentRatio(referenceFont);
-  const fontAscent = ascentRatio(font);
-  if (referenceAscent === undefined || fontAscent === undefined) return undefined;
-
-  const shift = (referenceAscent - fontAscent) * fontSize;
-  return Math.abs(shift) < 0.01 ? undefined : shift;
-}
-
-function ascentRatio(font: Pick<VasaFont, "data">) {
-  const metrics = font.data.metrics;
-  if (metrics === undefined || metrics.unitsPerEm <= 0) return undefined;
-  return metrics.ascender / metrics.unitsPerEm;
-}
-
 function fontForCssFont(options: EditorRenderProfileOptions, font: string | undefined) {
+  if (options.fonts.length <= 1) {
+    return (
+      options.fonts.find((candidate) => font?.includes(candidate.family)) ??
+      options.fonts.find((candidate) => font?.includes(candidate.cssFamily)) ??
+      editorRenderDefaultFont(options)
+    );
+  }
+
+  const style = parseCssFontStyle(font);
+  const weight = parseCssFontWeight(font);
+  const familyMatches = options.fonts.filter(
+    (candidate) => font?.includes(candidate.family) || font?.includes(candidate.cssFamily),
+  );
+
   return (
-    options.fonts.find((candidate) => font?.includes(candidate.family)) ??
-    options.fonts.find((candidate) => font?.includes(candidate.cssFamily)) ??
+    familyMatches.find(
+      (candidate) =>
+        (style === undefined || candidate.style === style) &&
+        (weight === undefined || candidate.weight === weight),
+    ) ??
+    familyMatches.find((candidate) => weight !== undefined && candidate.weight === weight) ??
+    familyMatches.find((candidate) => style !== undefined && candidate.style === style) ??
+    familyMatches[0] ??
     editorRenderDefaultFont(options)
   );
 }
@@ -411,26 +268,25 @@ function parseCssFontSize(font: string | undefined) {
   return match === null ? undefined : Number(match[1]);
 }
 
-function isItalicFontStyle(fontStyle: string | undefined) {
-  return fontStyle === "italic" || fontStyle === "oblique";
+function parseCssFontStyle(font: string | undefined) {
+  const source = font ?? "";
+  const sizeMatch = /(?:^|\s)(\d+(?:\.\d+)?)px(?:\/|\s|$)/.exec(source);
+  const prefix = sizeMatch === null ? source : source.slice(0, sizeMatch.index);
+  if (/(^|\s)italic(\s|$)/.test(prefix)) return "italic";
+  if (/(^|\s)oblique(\s|$)/.test(prefix)) return "oblique";
+  if (/(^|\s)normal(\s|$)/.test(prefix)) return "normal";
+  return undefined;
 }
 
-function fauxBoldOffset(requestedWeight: string, sourceWeight: string, fontSize: number) {
-  const requested = Number.parseInt(requestedWeight, 10);
-  const source = Number.parseInt(sourceWeight, 10);
-  if (!Number.isFinite(requested) || !Number.isFinite(source)) return undefined;
-  if (requested < 600) return undefined;
-  return Math.max(0.75, Math.min(1.4, fontSize * 0.07));
-}
-
-function getEditorNodeAtSourceId(doc: EditorJson, sourceId: string | undefined) {
-  if (sourceId === undefined || sourceId.length === 0) return undefined;
-
-  return sourceId.split(".").reduce<EditorJson | undefined>((node, segment) => {
-    const index = Number(segment);
-    if (!Number.isInteger(index)) return undefined;
-    return node?.content?.[index];
-  }, doc);
+function parseCssFontWeight(font: string | undefined) {
+  const source = font ?? "";
+  const sizeMatch = /(?:^|\s)(\d+(?:\.\d+)?)px(?:\/|\s|$)/.exec(source);
+  const prefix = sizeMatch === null ? source : source.slice(0, sizeMatch.index);
+  const numeric = /(?:^|\s)([1-9]00)(?:\s|$)/.exec(prefix)?.[1];
+  if (numeric !== undefined) return numeric;
+  if (/(^|\s)bold(\s|$)/.test(prefix)) return "700";
+  if (/(^|\s)normal(\s|$)/.test(prefix)) return "400";
+  return undefined;
 }
 
 function wrapMeasuredLineWithStarts(

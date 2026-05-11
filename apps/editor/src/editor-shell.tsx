@@ -181,12 +181,7 @@ function useEditorShell() {
 
 function Toolbar() {
   const { editor } = useEditorShell();
-  const selectableFonts = editor.fonts.filter(
-    (font, index, fonts) =>
-      fonts.findIndex(
-        (candidate) => candidate.family === font.family && candidate.style === font.style,
-      ) === index,
-  );
+  const selectableFonts = preferredSelectableFonts(editor.fonts);
   const selectedFontId =
     selectableFonts.find((font) => font.id === editor.selectedFontId)?.id ??
     selectableFonts.find(
@@ -365,6 +360,25 @@ function Toolbar() {
       </div>
     </section>
   );
+}
+
+function preferredSelectableFonts(fonts: UseEditorReturn["fonts"]) {
+  return fonts.reduce<UseEditorReturn["fonts"]>((selectable, font) => {
+    const index = selectable.findIndex(
+      (candidate) => candidate.family === font.family && candidate.style === font.style,
+    );
+    if (index === -1) return [...selectable, font];
+    if (isRegularFontWeight(font.weight) && !isRegularFontWeight(selectable[index]?.weight)) {
+      return selectable.map((candidate, candidateIndex) =>
+        candidateIndex === index ? font : candidate,
+      );
+    }
+    return selectable;
+  }, []);
+}
+
+function isRegularFontWeight(weight: string | number | undefined) {
+  return String(weight ?? "400") === "400";
 }
 
 function MarkButton({

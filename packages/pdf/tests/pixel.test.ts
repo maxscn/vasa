@@ -3,6 +3,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildCanvasScene, type CanvasNode, type CanvasTextLineNode } from "@vasa/canvas";
 import {
   createEditorCanvasTextMeasurer,
   createEditorCanvasTextPaint,
@@ -54,6 +55,7 @@ import {
 } from "@vasa/renderer";
 import { expect, test } from "vite-plus/test";
 import { renderDocumentToPdf, type PdfCommand } from "../src/index.ts";
+import { webEditorConfig } from "../../../apps/web/src/editor-config.ts";
 
 const page = { width: 48, height: 24, margin: 4 };
 const charWidth = 4;
@@ -74,6 +76,10 @@ const arimoBoldBytes = readFileSync(join(fixtureDir, "fixtures/fonts/google/arim
 const appEditorBoldOutlineFont = parseTextOutlineFont(arimoBoldBytes, {
   variations: { wght: 700 },
 });
+const geistBytes = readFileSync(join(fixtureDir, "fixtures/fonts/google/geist/Geist-Regular.ttf"));
+const geistOutlineFont = parseTextOutlineFont(geistBytes, { variations: { wght: 400 } });
+const geistBoldBytes = readFileSync(join(fixtureDir, "fixtures/fonts/google/geist/Geist-700.ttf"));
+const geistBoldOutlineFont = parseTextOutlineFont(geistBoldBytes, { variations: { wght: 700 } });
 const decorationFontFixtures = discoverDecorationFontFixtures();
 
 test("renders PDF and canvas output to matching page image hashes", async () => {
@@ -579,6 +585,20 @@ test("renders the apps/editor rich-text page contract identically between canvas
   expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
+test("apps/editor keeps visible space before Geist bold italic combined marks", () => {
+  const gap = expectCombinedMarksBoldItalicGap(geistFixtureRenderProfile());
+
+  expect(gap.measuredGap).toBeGreaterThanOrEqual(3);
+  expect(gap.inkGap).toBeGreaterThanOrEqual(10);
+});
+
+test("apps/web keeps visible space before Geist bold italic combined marks", () => {
+  const gap = expectCombinedMarksBoldItalicGap(webGeistFixtureRenderProfile());
+
+  expect(gap.measuredGap).toBeGreaterThanOrEqual(3);
+  expect(gap.inkGap).toBeGreaterThanOrEqual(10);
+});
+
 test("apps/editor outline PDF is not selectable through pdf.js text extraction", async () => {
   const contract = createAppEditorFixtureContract(createEditorParityDocument());
   const pdf = renderDocumentToPdf(contract.layoutTree, {
@@ -751,13 +771,13 @@ test("uses the apps/editor fixture to keep script marks visibly small and offset
   expect(subscript).toBeDefined();
   expect(oxygen).toBeDefined();
   expect(superscript).toBeDefined();
-  expect(subscript?.fontSize).toBe(
+  expect(subscript?.fontSize).toBeCloseTo(
     createFontScriptStyle(editorConfig.bundledFont, {
       fontSize: editorConfig.textFontSize,
       kind: "sub",
     }).fontSize,
   );
-  expect(superscript?.fontSize).toBe(
+  expect(superscript?.fontSize).toBeCloseTo(
     createFontScriptStyle(editorConfig.bundledFont, {
       fontSize: editorConfig.textFontSize,
       kind: "super",
@@ -823,29 +843,31 @@ test("places apps/editor PDF underline and strike decorations at DOM-like vertic
 
   expect(underlineRect).toBeDefined();
   expect(strikeRect).toBeDefined();
-  expect(underlineRect!.y).toBeGreaterThanOrEqual(
-    Math.floor(underlineBounds.y + underlineBounds.height),
-  );
-  expect(strikeRect!.y + strikeRect!.height / 2).toBeCloseTo(
-    strikeBounds.y + strikeBounds.height / 2,
-    0,
-  );
+  expect(underlined.textDecorationOffset).toBeDefined();
+  expect(underlineRect!.y).toBe(Math.round(underlined.y + underlined.textDecorationOffset!));
+  expect(struck.textDecorationOffset).toBeDefined();
+  expect(strikeRect!.y).toBe(Math.round(struck.y + struck.textDecorationOffset!));
 });
 
-test("centers Arimo PDF strikethrough over struck text", async () => {
+test("places Arimo PDF strikethrough at the font metric offset", async () => {
   const font = await createDecorationFixtureFont("Arimo", "google/arimo/Arimo-Regular.ttf");
   const fixture = createFontDecorationContract(font, {
     text: "struck text",
     mark: "strike",
   });
   const strikeLine = decoratedLine(fixture.pdf.layout, "struck text", "line-through");
-  const strikeBounds = outlineBounds(strikeLine, fixture.contract);
-  const strikeRect = decorationRectForLine(fixture.pdf.commands, strikeLine, strikeBounds);
+  const strikeRect = decorationRectForLine(
+    fixture.pdf.commands,
+    strikeLine,
+    outlineBounds(strikeLine, fixture.contract),
+  );
 
   expect(strikeRect, "Arimo struck text strike decoration").toBeDefined();
-  expect(strikeRect!.y + strikeRect!.height / 2, "Arimo struck text strike center").toBeCloseTo(
-    strikeBounds.y + strikeBounds.height / 2,
-    0,
+  expect(strikeLine.textDecorationOffset, "Arimo struck text strike offset").toBeCloseTo(
+    expectedFontStrikeoutOffset(font, strikeLine),
+  );
+  expect(strikeRect!.y, "Arimo struck text strike top").toBe(
+    expectedFontStrikeoutTop(font, strikeLine),
   );
 });
 
@@ -875,14 +897,20 @@ test.each(decorationFontFixtures)(
     expect.soft(strikeRect, `${family} strike decoration`).toBeDefined();
     if (strikeRect !== undefined) {
       expect
-        .soft(strikeRect.y + strikeRect.height / 2, `${family} strike center`)
-        .toBeCloseTo(strikeBounds.y + strikeBounds.height / 2, 0);
+        .soft(strikeLine.textDecorationOffset, `${family} strike offset`)
+        .toBeCloseTo(expectedFontStrikeoutOffset(font, strikeLine));
+      expect
+        .soft(strikeRect.y, `${family} strike top`)
+        .toBe(expectedFontStrikeoutTop(font, strikeLine));
     }
     expect.soft(underlineRect, `${family} underline decoration`).toBeDefined();
     if (underlineRect !== undefined) {
       expect
+        .soft(underlineLine.textDecorationOffset, `${family} underline offset`)
+        .toBeCloseTo(expectedFontUnderlineOffset(font, underlineLine));
+      expect
         .soft(underlineRect.y, `${family} underline top`)
-        .toBeGreaterThanOrEqual(Math.floor(underlineBounds.y + underlineBounds.height));
+        .toBe(expectedFontUnderlineTop(font, underlineLine));
     }
   },
 );
@@ -1316,6 +1344,36 @@ function createFontDecorationContract(
   return { contract, pdf };
 }
 
+function expectedFontStrikeoutOffset(font: VasaFont, line: TextLine) {
+  const metrics = font.data.metrics;
+  expect(metrics, `${font.family} metrics`).toBeDefined();
+  const unitsPerEm = metrics!.unitsPerEm;
+  const fontSize = line.fontSize ?? editorConfig.textFontSize;
+  const ascender = metrics!.ascender / unitsPerEm;
+  const position = (metrics!.strikeoutPosition ?? unitsPerEm * 0.25) / unitsPerEm;
+
+  return ascender * fontSize - position * fontSize;
+}
+
+function expectedFontStrikeoutTop(font: VasaFont, line: TextLine) {
+  return Math.round(line.y + expectedFontStrikeoutOffset(font, line));
+}
+
+function expectedFontUnderlineOffset(font: VasaFont, line: TextLine) {
+  const metrics = font.data.metrics;
+  expect(metrics, `${font.family} metrics`).toBeDefined();
+  const unitsPerEm = metrics!.unitsPerEm;
+  const fontSize = line.fontSize ?? editorConfig.textFontSize;
+  const ascender = metrics!.ascender / unitsPerEm;
+  const position = (metrics!.underlinePosition ?? -unitsPerEm * 0.1) / unitsPerEm;
+
+  return ascender * fontSize - position * fontSize;
+}
+
+function expectedFontUnderlineTop(font: VasaFont, line: TextLine) {
+  return Math.round(line.y + expectedFontUnderlineOffset(font, line));
+}
+
 function normalizeExtractedPdfText(pages: string[]) {
   return pages.join(" ").replaceAll(/\s+/g, " ").trim();
 }
@@ -1473,6 +1531,14 @@ function cropImage(image: RenderTestImage, rect: Rect): RenderTestImage {
   return { width, height, pixels };
 }
 
+function flattenCanvasTextLines(nodes: CanvasNode[]): CanvasTextLineNode[] {
+  return nodes.flatMap((node) => {
+    if (node.kind === "textLine") return [node];
+    if (node.kind === "box") return flattenCanvasTextLines(node.children);
+    return [];
+  });
+}
+
 function inkBounds(image: RenderTestImage) {
   let minX = image.width;
   let minY = image.height;
@@ -1562,6 +1628,97 @@ function appEditorFixtureRenderProfile() {
     fontSize: editorConfig.textFontSize,
     lineHeight: editorConfig.textLineHeight,
     textColor: editorConfig.textColor,
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+}
+
+function expectCombinedMarksBoldItalicGap(profile: ReturnType<typeof geistFixtureRenderProfile>) {
+  const contract = createEditorRenderDocument({
+    doc: createEditorParityDocument(),
+    page: appEditorFixturePage,
+    measurer: createEditorRenderTextMeasurer(profile),
+    profile,
+    rootStyle: { gap: 14 },
+    paragraphStyle: { flexDirection: "column" },
+    createRenderDocument,
+  });
+  const scene = buildCanvasScene(contract.renderDocument, {
+    pageBackground: "#fffdfa",
+    text: contract.canvasTextPaint,
+  });
+  const lines = scene.pages.flatMap((pageNode) => flattenCanvasTextLines(pageNode.children));
+  const prefix = lines.find((line) => line.text === "Combined marks should stay glued together: ");
+  const boldItalic = lines.find((line) => line.text === "bold italic");
+  const prefixBounds =
+    prefix?.outline === undefined ? undefined : textOutlinePathBounds(prefix.outline);
+  const boldItalicBounds =
+    boldItalic?.outline === undefined ? undefined : textOutlinePathBounds(boldItalic.outline);
+
+  expect(prefix).toBeDefined();
+  expect(boldItalic).toBeDefined();
+  expect(prefixBounds).toBeDefined();
+  expect(boldItalicBounds).toBeDefined();
+  return {
+    measuredGap: boldItalic!.x - (prefix!.x + prefix!.width),
+    inkGap: boldItalicBounds!.x - (prefixBounds!.x + prefixBounds!.width),
+  };
+}
+
+function geistFixtureRenderProfile() {
+  const font = {
+    ...editorConfig.bundledFont,
+    id: "geist-400",
+    family: "Geist",
+    displayName: "Geist",
+    cssFamily: "Geist, Arial, sans-serif",
+    outlineFont: geistOutlineFont,
+    data: {
+      kind: "outline" as const,
+      bytes: geistBytes,
+      metrics: {
+        ...createStandardFontMetrics({ family: "Geist" }),
+        unitsPerEm: geistOutlineFont.unitsPerEm,
+        ascender: geistOutlineFont.ascender,
+      },
+      outlineFont: geistOutlineFont,
+    },
+  };
+  const boldFont = {
+    ...font,
+    id: "geist-700",
+    weight: "700",
+    outlineFont: geistBoldOutlineFont,
+    data: {
+      kind: "outline" as const,
+      bytes: geistBoldBytes,
+      metrics: {
+        ...createStandardFontMetrics({ family: "Geist" }),
+        unitsPerEm: geistBoldOutlineFont.unitsPerEm,
+        ascender: geistBoldOutlineFont.ascender,
+      },
+      outlineFont: geistBoldOutlineFont,
+    },
+  };
+
+  return {
+    fonts: [font, boldFont],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: editorConfig.textFontSize,
+    lineHeight: editorConfig.textLineHeight,
+    textColor: editorConfig.textColor,
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+}
+
+function webGeistFixtureRenderProfile() {
+  return {
+    ...geistFixtureRenderProfile(),
+    fontSize: webEditorConfig.textFontSize,
+    lineHeight: webEditorConfig.textLineHeight,
+    textColor: webEditorConfig.textColor,
     whiteSpace: "pre-wrap" as const,
     wordBreak: "normal" as const,
   };

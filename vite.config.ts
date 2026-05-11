@@ -36,6 +36,7 @@ export default defineConfig({
       "@vasa/extension-text": workspacePackage("packages/extension-text/src/index.ts"),
       "@vasa/extension-text-style": workspacePackage("packages/extension-text-style/src/index.ts"),
       "@vasa/extension-underline": workspacePackage("packages/extension-underline/src/index.ts"),
+      "@vasa/editor": workspacePackage("packages/editor/src/index.ts"),
       "@vasa/font": workspacePackage("packages/font/src/index.ts"),
       "@vasa/layout": workspacePackage("packages/layout/src/index.ts"),
       "@vasa/pdf": workspacePackage("packages/pdf/src/index.ts"),

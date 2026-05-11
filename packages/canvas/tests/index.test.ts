@@ -417,6 +417,50 @@ test("applies paint font size to underline and strike decoration offsets", () =>
   ]);
 });
 
+test("keeps strikethrough at its font metric offset with outlined text", () => {
+  const layout = layoutDocument(
+    {
+      type: "box",
+      children: [
+        {
+          type: "inlineText",
+          runs: [
+            {
+              id: "strike",
+              text: "strike",
+              style: {
+                lineHeight: 20,
+                textDecorationLine: "line-through",
+                textDecorationOffset: 6,
+                textDecorationThickness: 2,
+              },
+            },
+          ],
+        },
+      ],
+    },
+    { page: { width: 120, height: 60, margin: 10 }, measurer },
+  );
+  const commands = createCanvasCommands(
+    buildCanvasScene(createRenderDocument(layout), {
+      text: () => ({ fill: "#111111", fontSize: 10, outlineFont: outlineFont() }),
+    }),
+  );
+  const text = commands.find(
+    (command): command is Extract<CanvasCommand, { type: "fillText" }> =>
+      command.type === "fillText",
+  );
+  const decoration = commands.find(
+    (command): command is Extract<CanvasCommand, { type: "fillRect" }> =>
+      command.type === "fillRect" && command.fill === "#111111",
+  );
+  const line = layout.pages[0]?.boxes[0]?.lines?.[0];
+
+  expect(text).toBeUndefined();
+  expect(line).toBeDefined();
+  expect(decoration?.rect.y).toBe(Math.round(line!.y + 6));
+});
+
 test("reconciles retained, updated, mounted, and unmounted scene nodes", () => {
   const previous = buildCanvasScene(layoutDocument(document(), page()), { pageGap: 12 });
   const nextDocument: BoxNode = {

@@ -19,6 +19,9 @@ export type VasaFontMetrics = {
   ascender: number;
   descender: number;
   lineGap: number;
+  italicAngle?: number;
+  underlinePosition?: number;
+  underlineThickness?: number;
   strikeoutPosition?: number;
   strikeoutSize?: number;
   subscriptYOffset?: number;
@@ -97,16 +100,14 @@ export type CreateFontRegistryOptions = {
   fontSet?: RuntimeFontSet;
 };
 
-const SCRIPT_SUBSCRIPT_OPTICAL_DROP = 0.125;
-const SCRIPT_SUPERSCRIPT_OPTICAL_DROP = 0.075;
-const SCRIPT_SUBSCRIPT_MIN_OFFSET = 0.138;
-const SCRIPT_SUPERSCRIPT_MIN_OFFSET = 0.477;
-
 const STANDARD_SANS_METRICS: VasaFontMetrics = {
   unitsPerEm: 2048,
   ascender: 1854,
   descender: -434,
   lineGap: 67,
+  italicAngle: 0,
+  underlinePosition: -217,
+  underlineThickness: 102,
   strikeoutPosition: 530,
   strikeoutSize: 102,
   subscriptYOffset: 283,
@@ -122,6 +123,9 @@ const STANDARD_SERIF_METRICS: VasaFontMetrics = {
   ascender: 1825,
   descender: -443,
   lineGap: 87,
+  italicAngle: 0,
+  underlinePosition: -217,
+  underlineThickness: 102,
   strikeoutPosition: 530,
   strikeoutSize: 102,
   subscriptYOffset: 287,
@@ -137,6 +141,9 @@ const STANDARD_MONO_METRICS: VasaFontMetrics = {
   ascender: 1705,
   descender: -615,
   lineGap: 0,
+  italicAngle: 0,
+  underlinePosition: -217,
+  underlineThickness: 102,
   strikeoutPosition: 530,
   strikeoutSize: 102,
   subscriptYOffset: 287,
@@ -265,15 +272,26 @@ function fontMetrics(font: TextOutlineFont): VasaFontMetrics {
         sxHeight?: number;
         sCapHeight?: number;
       };
+      post?: {
+        italicAngle?: number;
+        underlinePosition?: number;
+        underlineThickness?: number;
+      };
     };
   };
   const os2 = source.tables?.os2;
+  const post = source.tables?.post;
 
   return {
     unitsPerEm: font.unitsPerEm,
     ascender: font.ascender,
     descender: source.descender ?? 0,
     lineGap: source.tables?.hhea?.lineGap ?? 0,
+    ...(post?.italicAngle === undefined ? {} : { italicAngle: post.italicAngle }),
+    ...(post?.underlinePosition === undefined ? {} : { underlinePosition: post.underlinePosition }),
+    ...(post?.underlineThickness === undefined
+      ? {}
+      : { underlineThickness: post.underlineThickness }),
     ...(os2?.yStrikeoutPosition === undefined ? {} : { strikeoutPosition: os2.yStrikeoutPosition }),
     ...(os2?.yStrikeoutSize === undefined ? {} : { strikeoutSize: os2.yStrikeoutSize }),
     ...(os2?.ySubscriptYOffset === undefined ? {} : { subscriptYOffset: os2.ySubscriptYOffset }),
@@ -294,7 +312,7 @@ export function createFontScriptStyle(
   const metrics = font.data.metrics;
   const fallbackScale = options.fallbackScale ?? 0.5;
   if (metrics === undefined) {
-    const fontSize = Math.max(6, Math.round(options.fontSize * fallbackScale));
+    const fontSize = Math.max(1, options.fontSize * fallbackScale);
     const baselineDelta =
       options.kind === "super" ? -options.fontSize * 0.45 : options.fontSize * 0.2;
 
@@ -307,19 +325,10 @@ export function createFontScriptStyle(
   const unitsPerEm = positive(metrics.unitsPerEm) ?? 1;
   const ySize = options.kind === "super" ? metrics.superscriptYSize : metrics.subscriptYSize;
   const yOffset = options.kind === "super" ? metrics.superscriptYOffset : metrics.subscriptYOffset;
-  const scale = clamp((positive(ySize) ?? unitsPerEm * fallbackScale) / unitsPerEm, 0.45, 0.8);
-  const fontSize = Math.max(6, Math.round(options.fontSize * scale));
-  const minOffset =
-    options.kind === "super" ? SCRIPT_SUPERSCRIPT_MIN_OFFSET : SCRIPT_SUBSCRIPT_MIN_OFFSET;
-  const metricShift =
-    (Math.max(positive(yOffset) ?? unitsPerEm * 0.2, unitsPerEm * minOffset) / unitsPerEm) *
-    options.fontSize;
-  const opticalDrop =
-    options.kind === "super"
-      ? options.fontSize * SCRIPT_SUPERSCRIPT_OPTICAL_DROP
-      : options.fontSize * SCRIPT_SUBSCRIPT_OPTICAL_DROP;
-  const baselineDelta =
-    options.kind === "super" ? -metricShift + opticalDrop : metricShift + opticalDrop;
+  const scale = (positive(ySize) ?? unitsPerEm * fallbackScale) / unitsPerEm;
+  const fontSize = Math.max(1, options.fontSize * scale);
+  const metricShift = ((positive(yOffset) ?? unitsPerEm * 0.2) / unitsPerEm) * options.fontSize;
+  const baselineDelta = options.kind === "super" ? -metricShift : metricShift;
   const ascenderRatio = clamp(
     (positive(metrics.ascender) ?? unitsPerEm * 0.9) / unitsPerEm,
     0.6,
@@ -329,6 +338,34 @@ export function createFontScriptStyle(
   return {
     fontSize,
     baselineShift: baselineDelta + ascenderRatio * (options.fontSize - fontSize),
+  };
+}
+
+export function createFontUnderlineStyle(
+  font: Pick<VasaFont, "data">,
+  options: { fontSize: number },
+): FontTextDecorationStyle {
+  const metrics = font.data.metrics;
+  if (metrics === undefined) {
+    return {
+      offset: options.fontSize,
+      thickness: Math.max(1, Math.round(options.fontSize * 0.06)),
+    };
+  }
+
+  const unitsPerEm = positive(metrics.unitsPerEm) ?? 1;
+  const ascender = metrics.ascender / unitsPerEm;
+  const position = (metrics.underlinePosition ?? -unitsPerEm * 0.1) / unitsPerEm;
+  const thickness = Math.max(
+    1,
+    Math.round(
+      ((positive(metrics.underlineThickness) ?? unitsPerEm * 0.05) / unitsPerEm) * options.fontSize,
+    ),
+  );
+
+  return {
+    offset: ascender * options.fontSize - position * options.fontSize,
+    thickness,
   };
 }
 
@@ -355,9 +392,15 @@ export function createFontStrikeoutStyle(
   );
 
   return {
-    offset: ascender * options.fontSize - position * options.fontSize - thickness / 2,
+    offset: ascender * options.fontSize - position * options.fontSize,
     thickness,
   };
+}
+
+export function createFontItalicSkew(font: Pick<VasaFont, "data">): number | undefined {
+  const angle = font.data.metrics?.italicAngle;
+  if (angle === undefined || angle === 0) return undefined;
+  return Math.tan((-angle * Math.PI) / 180);
 }
 
 export function createCssFontFamily(family: string, fallbackFamilies: string[] = []) {
@@ -406,6 +449,8 @@ export function createGoogleFontDescriptors(options: GoogleFontDescriptorOptions
   return [
     createGoogleFontDescriptor("Arimo", "arimo/Arimo-Regular.ttf", "400", options),
     createGoogleFontDescriptor("Arimo", "arimo/Arimo-700.ttf", "700", options),
+    createGoogleFontDescriptor("Geist", "geist/Geist-Regular.ttf", "400", options),
+    createGoogleFontDescriptor("Geist", "geist/Geist-700.ttf", "700", options),
     createGoogleFontDescriptor("Inter", "inter/Inter-Regular.ttf", "400", options),
     createGoogleFontDescriptor("Inter", "inter/Inter-700.ttf", "700", options),
     createGoogleFontDescriptor("Lora", "lora/Lora-Regular.ttf", "400", options),

@@ -52,7 +52,22 @@ test("uses the same outline path primitive as the canvas and PDF parity path", (
   expect(analyzeWebGlScene(textScene({ outline })).textTriangleCount).toBeGreaterThan(0);
 });
 
-function textScene({ outline }: { outline: boolean | ReturnType<typeof createTextLineOutline> }) {
+test("keeps strikethrough at its font metric offset with outlined glyphs", () => {
+  const scene = textScene({ outline: true, textDecorationLine: "line-through" });
+  const analysis = analyzeWebGlScene(scene);
+  const decoration = analysis.decorationPrimitives.at(0);
+
+  expect(decoration).toMatchObject({ text: "A", line: "line-through" });
+  expect(decoration!.rect.y).toBe(26);
+});
+
+function textScene({
+  outline,
+  textDecorationLine,
+}: {
+  outline: boolean | ReturnType<typeof createTextLineOutline>;
+  textDecorationLine?: "underline" | "line-through";
+}) {
   const line = { text: "A", x: 10, y: 20 };
   return {
     pages: [
@@ -71,6 +86,9 @@ function textScene({ outline }: { outline: boolean | ReturnType<typeof createTex
             height: 16,
             font: "400 16px Test, sans-serif",
             fill: "#111111",
+            ...(textDecorationLine === undefined
+              ? {}
+              : { textDecorationLine, textDecorationOffset: 6, textDecorationThickness: 2 }),
             ...(outline === false
               ? {}
               : {

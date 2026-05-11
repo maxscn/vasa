@@ -524,10 +524,17 @@ export function useEditor({ config }: EditorProps) {
         : currentPage.content.y + currentPage.content.height - lastPageContentBottomY(currentPage);
 
     updateEditor((session) => {
-      return applyEditorSessionMutation(session, (doc) => {
+      return applyEditorSessionMutation(session, (doc, currentSelection) => {
+        const fontId = currentEditorTextStyleAttrs(
+          doc,
+          currentSelection,
+          session.storedMarks,
+        ).fontId;
+
         return insertPageBreakAtDocumentEnd(
           doc,
           Math.max(config.textLineHeight, remainingHeight + config.textLineHeight),
+          fontId === undefined ? {} : { fontId },
         );
       });
     });

@@ -75,12 +75,15 @@ import {
   createEditorCanvasTextPaint,
   createEditorPdfOutlineText,
   createEditorRenderDocument,
+  createEditorRenderMeasureText,
   createEditorRenderTextMeasurer,
+  createEditorTextStyleResolver,
   defaultEditorExtensions,
   editorCodeFontId,
   editorHeadingTextStyleAttrs,
   type EditorSelection,
   type EditorJson,
+  type EditorRenderProfileOptions,
   type EditorRenderLineDocument,
 } from "../src/index.ts";
 
@@ -126,6 +129,31 @@ const parityOutlineFont = {
     },
   },
 } satisfies TextOutlineFont;
+
+function outlineFontWithAdvance(advanceWidth: number): TextOutlineFont {
+  return {
+    unitsPerEm: 1000,
+    ascender: 750,
+    source: {
+      charToGlyph() {
+        return {
+          advanceWidth,
+          getPath(x: number, y: number, fontSize: number) {
+            return {
+              commands: [
+                { type: "M", x, y },
+                { type: "L", x: x + fontSize * 0.5, y },
+                { type: "L", x: x + fontSize * 0.5, y: y - fontSize },
+                { type: "L", x, y: y - fontSize },
+                { type: "Z" },
+              ],
+            };
+          },
+        };
+      },
+    },
+  };
+}
 
 function testOutlineFont(): VasaFont {
   const family = "Parity";
@@ -419,7 +447,7 @@ test("aligns code font baselines with the default editor font", () => {
   ).toBeCloseTo(1.164, 3);
 });
 
-test("keeps bold visually emboldened after resolving weighted font faces", () => {
+test("uses real bold font faces with modest outline emboldening", () => {
   const regularOutline = { id: "regular-outline" } as unknown as NonNullable<
     VasaFont["outlineFont"]
   >;
@@ -454,14 +482,310 @@ test("keeps bold visually emboldened after resolving weighted font faces", () =>
   ).toMatchObject({
     font: "normal 700 16px Inter, Arial, sans-serif",
     outlineFont: boldOutline,
-    embolden: 1.12,
+    embolden: 0.72,
   });
   expect(
     createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0),
   ).toMatchObject({
     font: boldOutline,
+    embolden: 0.72,
+  });
+});
+
+test("faux emboldens only when no bold face is available", () => {
+  const regularOutline = { id: "regular-outline" } as unknown as NonNullable<
+    VasaFont["outlineFont"]
+  >;
+  const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "Bold Inter",
+            marks: [{ type: "textStyle", attrs: { fontId: "inter-400" } }, { type: "bold" }],
+          },
+        ],
+      },
+    ],
+  };
+  const profile = {
+    fonts: [regular],
+    defaultFontId: "inter-400",
+    fallbackFont: regular,
+    fontSize: 16,
+    lineHeight: 16,
+  };
+
+  expect(
+    createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0),
+  ).toMatchObject({
+    font: "normal 700 16px Inter, Arial, sans-serif",
+    outlineFont: regularOutline,
     embolden: 1.12,
   });
+});
+
+test("uses real italic font faces for layout and paint without faux skew", () => {
+  const regularOutline = outlineFontWithAdvance(1000);
+  const italicOutline = outlineFontWithAdvance(500);
+  const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
+  const italic = testFont({
+    id: "inter-italic",
+    weight: "400",
+    style: "italic",
+    outlineFont: italicOutline,
+  });
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Italic Inter", marks: [{ type: "italic" }] }],
+      },
+    ],
+  };
+  const profile = {
+    fonts: [regular, italic],
+    defaultFontId: regular.id,
+    fallbackFont: regular,
+    fontSize: 10,
+    lineHeight: 12,
+    italicSkewX: 0.25,
+  };
+
+  expect(createEditorRenderResolveTextStyle(profile)({ fontStyle: "italic" })).toMatchObject({
+    font: "italic 400 10px Inter, Arial, sans-serif",
+  });
+  expect(
+    createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0),
+  ).toMatchObject({
+    font: "italic 400 10px Inter, Arial, sans-serif",
+    outlineFont: italicOutline,
+    skewX: undefined,
+  });
+  expect(
+    createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0),
+  ).toMatchObject({
+    font: italicOutline,
+    skewX: undefined,
+  });
+});
+
+test("applies faux italic skew only when the italic face is synthetic", () => {
+  const regularOutline = outlineFontWithAdvance(1000);
+  const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Synthetic italic", marks: [{ type: "italic" }] }],
+      },
+    ],
+  };
+  const profile = {
+    fonts: [regular],
+    defaultFontId: regular.id,
+    fallbackFont: regular,
+    fontSize: 10,
+    lineHeight: 12,
+    italicSkewX: 0.25,
+  };
+
+  expect(
+    createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0),
+  ).toMatchObject({
+    font: "italic 400 10px Inter, Arial, sans-serif",
+    outlineFont: regularOutline,
+    skewX: 0.25,
+  });
+  expect(
+    createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0),
+  ).toMatchObject({
+    font: regularOutline,
+    skewX: 0.25,
+  });
+});
+
+test("uses bold face plus skew for bold italic when italic bold face is unavailable", () => {
+  const regularOutline = outlineFontWithAdvance(1000);
+  const boldOutline = outlineFontWithAdvance(1000);
+  const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
+  const bold = testFont({ id: "inter-700", weight: "700", outlineFont: boldOutline });
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "bold italic",
+            marks: [{ type: "bold" }, { type: "italic" }],
+          },
+        ],
+      },
+    ],
+  };
+  const profile = {
+    fonts: [regular, bold],
+    defaultFontId: regular.id,
+    fallbackFont: regular,
+    fontSize: 10,
+    lineHeight: 12,
+    italicSkewX: 0.25,
+  };
+  const paint = createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0);
+
+  expect(paint).toMatchObject({
+    font: "italic 700 10px Inter, Arial, sans-serif",
+    outlineFont: boldOutline,
+    embolden: 0.45,
+    skewX: 0.25,
+  });
+});
+
+test("measures synthetic bold italic with the closest bold outline face", () => {
+  const regular = testFont({
+    id: "inter-400",
+    weight: "400",
+    outlineFont: outlineFontWithAdvance(1000),
+  });
+  const bold = testFont({
+    id: "inter-700",
+    weight: "700",
+    outlineFont: outlineFontWithAdvance(2000),
+  });
+  const measureText = createEditorRenderMeasureText({
+    fonts: [regular, bold],
+    defaultFontId: regular.id,
+    fallbackFont: regular,
+    fontSize: 10,
+    lineHeight: 12,
+  });
+
+  expect(measureText("B", "italic 700 10px Inter, Arial, sans-serif")).toBe(20);
+});
+
+test("lets stylesheets extend layout and renderer text styles", () => {
+  const outlineFont = outlineFontWithAdvance(1000);
+  const font = testFont({ id: "inter-400", outlineFont });
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 10,
+    lineHeight: 12,
+    stylesheets: [
+      {
+        name: "accent",
+        textStyle: ({ attrs }) => (attrs.code === true ? { letterSpacing: 2 } : undefined),
+        canvasTextPaint: ({ attrs }) => (attrs.code === true ? { fill: "#ef4444" } : undefined),
+        pdfOutlineText: ({ attrs }) => (attrs.code === true ? { fill: "#ef4444" } : undefined),
+      },
+    ],
+  } satisfies EditorRenderProfileOptions;
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "code", marks: [{ type: "code" }] }],
+      },
+    ],
+  };
+  const resolver = createEditorTextStyleResolver({ profile, doc });
+
+  expect(resolver.resolveTextStyle({ code: true })).toMatchObject({ letterSpacing: 2 });
+  expect(resolver.canvasTextPaint({ lines: [{ sourceId: "0.0" }] }, 0)).toMatchObject({
+    fill: "#ef4444",
+  });
+  expect(resolver.pdfOutlineText({ sourceId: "0.0", lines: [{}] }, 0)).toMatchObject({
+    fill: "#ef4444",
+  });
+});
+
+test("does not shrink script text again during canvas and PDF paint resolution", () => {
+  const outlineFont = outlineFontWithAdvance(1000);
+  const font = testFont({ id: "inter-400", outlineFont });
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    scriptScale: 0.5,
+  };
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "2", marks: [{ type: "superscript" }] }],
+      },
+    ],
+  };
+  const resolvedLine = { sourceId: "0.0", fontSize: 8 };
+
+  expect(createEditorCanvasTextPaint(doc, profile, { lines: [resolvedLine] }, 0).fontSize).toBe(8);
+  expect(
+    createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [resolvedLine] }, 0)
+      ?.fontSize,
+  ).toBe(8);
+});
+
+test("uses resolved italic faces when wrapping mixed inline text", () => {
+  const regular = testFont({
+    id: "inter-400",
+    weight: "400",
+    outlineFont: outlineFontWithAdvance(1000),
+  });
+  const italic = testFont({
+    id: "inter-italic",
+    weight: "400",
+    style: "italic",
+    outlineFont: outlineFontWithAdvance(500),
+  });
+  const profile = {
+    fonts: [regular, italic],
+    defaultFontId: regular.id,
+    fallbackFont: regular,
+    fontSize: 10,
+    lineHeight: 12,
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "AA " },
+          { type: "text", text: "BBBB", marks: [{ type: "italic" }] },
+        ],
+      },
+    ],
+  };
+  const layout = layoutDocument(
+    createEditorLayoutTree(doc, {
+      resolveTextStyle: createEditorRenderResolveTextStyle(profile),
+      textStyle: { lineHeight: 12 },
+    }),
+    {
+      page: { width: 50, height: 120, margin: 0 },
+      measurer: createEditorRenderTextMeasurer(profile),
+      textGrid: false,
+    },
+  );
+  const textBox = layout.pages[0]?.boxes[0]?.children[0];
+
+  expect(textBox?.visualLines).toHaveLength(1);
+  expect(textBox?.visualLines?.[0]?.width).toBe(53);
 });
 
 test("converts table documents into row and cell layout containers", () => {
@@ -1214,6 +1538,24 @@ test("inserts page breaks before an editable block", () => {
   expect(heading.doc.content?.[2]).toMatchObject({
     type: "heading",
     attrs: { level: 1 },
+  });
+});
+
+test("inserts page breaks with the current font ready for new text", () => {
+  const inserted = insertPageBreakAtDocumentEnd(editorDoc("Intro"), 120, { fontId: "geist" });
+
+  expect(inserted.doc.content?.[2]).toEqual({
+    type: "paragraph",
+    content: [
+      {
+        type: "text",
+        text: "",
+        marks: [{ type: "textStyle", attrs: { fontId: "geist" } }],
+      },
+    ],
+  });
+  expect(currentEditorTextStyleAttrs(inserted.doc, inserted.selection)).toMatchObject({
+    fontId: "geist",
   });
 });
 

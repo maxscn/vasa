@@ -633,6 +633,12 @@ function buildCanvasNodes(
         ...(line.textDecorationColor === undefined
           ? {}
           : { textDecorationColor: line.textDecorationColor }),
+        ...(line.textDecorationOffset === undefined
+          ? {}
+          : { textDecorationOffset: line.textDecorationOffset }),
+        ...(line.textDecorationThickness === undefined
+          ? {}
+          : { textDecorationThickness: line.textDecorationThickness }),
         ...(paint.pixelSnap === undefined ? {} : { pixelSnap: paint.pixelSnap }),
         ...(paint.outlineFont === undefined
           ? {}
@@ -843,13 +849,12 @@ function textDecorationRect(
     node.textDecorationLine === "line-through"
       ? fontSize * 0.6
       : Math.min(node.height - thickness, fontSize);
+  const hasMetricOffset = node.textDecorationOffset !== undefined;
   const offset = node.textDecorationOffset ?? fallbackOffset;
   const y =
-    bounds === undefined
+    bounds === undefined || node.textDecorationLine === "line-through" || hasMetricOffset
       ? Math.round(node.y + offset)
-      : node.textDecorationLine === "line-through"
-        ? Math.round(bounds.y + bounds.height / 2 - thickness / 2)
-        : Math.max(Math.round(node.y + offset), Math.floor(bounds.y + bounds.height));
+      : Math.max(Math.round(node.y + offset), Math.floor(bounds.y + bounds.height));
 
   return {
     x: horizontal.x,

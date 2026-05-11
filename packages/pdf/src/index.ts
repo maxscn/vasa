@@ -492,13 +492,12 @@ function textDecorationRect(
     line.textDecorationLine === "line-through"
       ? fontSize * 0.6
       : Math.min(line.height - thickness, fontSize);
+  const hasMetricOffset = line.textDecorationOffset !== undefined;
   const offset = line.textDecorationOffset ?? fallbackOffset;
   const y =
-    bounds === undefined
+    bounds === undefined || line.textDecorationLine === "line-through" || hasMetricOffset
       ? Math.round(line.y + offset)
-      : line.textDecorationLine === "line-through"
-        ? Math.round(bounds.y + bounds.height / 2 - thickness / 2)
-        : Math.max(Math.round(line.y + offset), Math.floor(bounds.y + bounds.height));
+      : Math.max(Math.round(line.y + offset), Math.floor(bounds.y + bounds.height));
 
   return {
     x: horizontal.x,
