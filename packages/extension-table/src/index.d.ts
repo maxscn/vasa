@@ -31,6 +31,7 @@ export type TableCellNode = {
 };
 export type TableExtensionRenderers = {
   canvas: CanvasRendererExtension;
+  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 export type TableExtensionOptions = {

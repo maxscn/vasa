@@ -76,7 +76,7 @@ const fallbackFont: VasaFont = {
   data: { kind: "native", metrics: createStandardFontMetrics({ family: "Arimo" }) },
 };
 
-const initialText = `vasa.sh
+const initialText = `Vasa
 
 A canvas based text editor
 with a 1 to 1 mapping to PDF.
@@ -163,7 +163,7 @@ export function LandingEditor() {
         page,
         measurer: textMeasurer,
         extensions: collectLayoutExtensions(documentExtensions),
-        metadata: { title: "vasa.sh landing document", author: "vasa.sh" },
+        metadata: { title: "Vasa landing document", author: "Vasa" },
         defaultTextFill: renderProfile.textColor,
         outlineText: (node, lineIndex) =>
           createEditorPdfOutlineText(editorDocument, renderProfile, node, lineIndex),
@@ -411,9 +411,9 @@ export function LandingEditor() {
   return (
     <section className="real-editor-hero" aria-label="Interactive vasa editor">
       <div className="real-editor-toolbar">
-        <a className="real-editor-brand" href="/" aria-label="vasa.sh home">
-          <span className="real-editor-mark">/\</span>
-          <span>vasa.sh</span>
+        <a className="real-editor-brand" href="/" aria-label="Vasa home">
+          <img alt="" aria-hidden="true" className="real-editor-mark" src="/vasa.svg" />
+          <span>Vasa</span>
         </a>
         <div className="real-editor-tools" aria-label="Editor tools">
           <Button

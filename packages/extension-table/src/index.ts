@@ -37,6 +37,7 @@ export type TableCellNode = {
 
 export type TableExtensionRenderers = {
   canvas: CanvasRendererExtension;
+  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 
@@ -124,6 +125,11 @@ export function createTableExtension(
         options.renderers?.canvas,
         options.rendererPlacement,
       ),
+      webgl: mergeRenderers(
+        tableRenderers.webgl,
+        options.renderers?.webgl,
+        options.rendererPlacement,
+      ),
       pdf: mergeRenderers(tableRenderers.pdf, options.renderers?.pdf, options.rendererPlacement),
     },
   };
@@ -174,6 +180,7 @@ const tableRenderExtension = {
 
 const tableRenderers = {
   canvas: tableCanvasRenderer,
+  webgl: tableCanvasRenderer,
   pdf: tablePdfRenderer,
 } satisfies TableExtensionRenderers;
 

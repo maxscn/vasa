@@ -16,6 +16,7 @@ export type HorizontalRuleNode = LayoutNodeBase<"horizontalRule"> & {
 
 export type HorizontalRuleRenderers = {
   canvas: CanvasRendererExtension;
+  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 
@@ -64,6 +65,7 @@ export const HorizontalRule: VasaExtension<HorizontalRuleRenderers> = {
   } satisfies LayoutExtension<HorizontalRuleNode>,
   renderers: {
     canvas: horizontalRuleCanvasRenderer,
+    webgl: horizontalRuleCanvasRenderer,
     pdf: horizontalRulePdfRenderer,
   },
 };

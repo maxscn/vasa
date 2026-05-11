@@ -95,7 +95,7 @@ export function EditorShell({
   const [droppedSvgNodes, setDroppedSvgNodes] = useState<SvgNode[]>([]);
   const [marginPreset, setMarginPresetState] = useState<MarginPresetId>("normal");
   const [pagePreset, setPagePreset] = useState<PagePresetId>("a4");
-  const [showMarginOutlines, setShowMarginOutlines] = useState(true);
+  const [showMarginOutlines, setShowMarginOutlines] = useState(false);
   const [pageMargin, setPageMargin] = useState<ResolvedBoxEdges>(() =>
     resolvePageMargin(baseConfig.page.margin),
   );
@@ -126,6 +126,7 @@ export function EditorShell({
     defaultTextFill: config.textColor,
     downloadTextMode: "outline",
     downloadFileName: "vasa-editor-demo.pdf",
+    previewBitmapScale: config.canvasBitmapScale,
   });
 
   return (
@@ -194,6 +195,9 @@ function Toolbar() {
         editor.fonts.find((candidate) => candidate.id === editor.selectedFontId)?.family,
     )?.id ??
     editor.selectedFontId;
+  const selectedBrandFont =
+    editor.fonts.find((font) => font.id === selectedFontId) ??
+    editor.fonts.find((font) => font.id === editor.selectedFontId);
   const blockStyle =
     editor.selectedBlock.type === "heading" && editor.selectedBlock.attrs?.level === 1
       ? "heading-1"
@@ -211,7 +215,9 @@ function Toolbar() {
     <section className="editor-toolbar" aria-label="Document actions">
       <div>
         <p className="eyebrow">Vasa</p>
-        <h1>vasa.sh</h1>
+        <h1 style={selectedBrandFont ? { fontFamily: selectedBrandFont.cssFamily } : undefined}>
+          Vasa
+        </h1>
       </div>
       <div className="toolbar-controls">
         <SelectField
@@ -432,6 +438,7 @@ function CanvasEditor() {
             ref={editor.canvasRef}
             data-active-font-family={activeFont?.family}
             data-active-font-id={activeFont?.id}
+            data-canvas-text-mode={editor.canvasTextMode}
             data-outline-font-ready={editor.hasActiveOutlineFont ? "true" : "false"}
             data-font-ready={editor.isFontReady ? "true" : "false"}
             onPointerDown={editor.handleCanvasPointerDown}

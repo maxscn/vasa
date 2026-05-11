@@ -65,6 +65,8 @@ export const editorConfig = {
   fontFamilies: googleFontFamilies,
   fontSizeOptions,
   initialColor: "#2563eb",
+  canvasTextMode: "outline",
+  canvasBitmapScale: 1.5,
   pageBackground: "#fffdfa",
   textColor: "#1f2937",
 } satisfies EditorConfig;

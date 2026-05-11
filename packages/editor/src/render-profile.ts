@@ -27,6 +27,7 @@ export type EditorRenderProfileOptions = {
   whiteSpace?: TextStyle["whiteSpace"];
   wordBreak?: TextStyle["wordBreak"];
   italicSkewX?: number;
+  outlinePixelSnap?: number;
   scriptScale?: number;
 };
 
@@ -45,6 +46,7 @@ export type EditorCanvasTextPaint = {
   fontSize: number;
   outlineFont?: VasaFont["outlineFont"];
   embolden?: number;
+  pixelSnap?: number;
   skewX?: number;
 };
 
@@ -53,6 +55,7 @@ export type EditorPdfOutlineText = {
   fontSize: number;
   fill: string;
   embolden?: number;
+  pixelSnap?: number;
   skewX?: number;
 };
 
@@ -217,6 +220,7 @@ export function createEditorCanvasTextPaint(
     fontSize,
     outlineFont: familyFont.outlineFont,
     embolden: fauxBoldOffset(fontWeight, familyFont.weight, fontSize),
+    pixelSnap: options.outlinePixelSnap,
     skewX: isItalicFontStyle(fontStyle) ? (options.italicSkewX ?? 0.35) : undefined,
   };
 }
@@ -243,6 +247,7 @@ export function createEditorPdfOutlineText(
     fontSize,
     fill: line?.color ?? attrs.color ?? options.textColor ?? "#111111",
     embolden: fauxBoldOffset(fontWeight, familyFont.weight, fontSize),
+    pixelSnap: options.outlinePixelSnap,
     skewX: isItalicFontStyle(fontStyle) ? (options.italicSkewX ?? 0.35) : undefined,
   };
 }

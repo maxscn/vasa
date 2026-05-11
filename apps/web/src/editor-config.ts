@@ -38,6 +38,8 @@ export const webEditorConfig = {
   fontFamilies: defaultFontFamilies,
   fontSizeOptions: [12, 14, 16, 18, 22, 28, 36],
   initialColor: "#2563eb",
+  canvasTextMode: "outline",
+  canvasBitmapScale: 1.5,
   pageBackground: "#fffdfa",
   textColor: "#1f2937",
 } satisfies EditorConfig;

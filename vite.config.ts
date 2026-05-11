@@ -40,6 +40,7 @@ export default defineConfig({
       "@vasa/layout": workspacePackage("packages/layout/src/index.ts"),
       "@vasa/pdf": workspacePackage("packages/pdf/src/index.ts"),
       "@vasa/renderer": workspacePackage("packages/renderer/src/index.ts"),
+      "@vasa/webgl": workspacePackage("packages/webgl/src/index.ts"),
     },
   },
   test: {

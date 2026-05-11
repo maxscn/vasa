@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
+import { buildCanvasScene, type CanvasNode, type CanvasScene } from "@vasa/canvas";
 import { generateHTML, generateJSON, getSchema } from "@vasa/core";
 import { createStandardFontMetrics, type VasaFont } from "@vasa/font";
 import { layoutDocument, type LayoutResult } from "@vasa/layout";
+import { createRenderDocument, type TextOutlineFont } from "@vasa/renderer";
+import { analyzeWebGlScene } from "@vasa/webgl";
 import { expect, test } from "vite-plus/test";
 import { applyEditorKeymap, type EditorKeymapOptions } from "../react/keymap.ts";
 import {
@@ -71,6 +74,8 @@ import {
   createEditorParityDocument,
   createEditorCanvasTextPaint,
   createEditorPdfOutlineText,
+  createEditorRenderDocument,
+  createEditorRenderTextMeasurer,
   defaultEditorExtensions,
   editorCodeFontId,
   editorHeadingTextStyleAttrs,
@@ -97,6 +102,88 @@ function testFont(overrides: Partial<VasaFont>): VasaFont {
     data: { kind: "native" },
     ...overrides,
   };
+}
+
+const parityOutlineFont = {
+  unitsPerEm: 1000,
+  ascender: 750,
+  source: {
+    charToGlyph() {
+      return {
+        advanceWidth: 600,
+        getPath(x: number, y: number, fontSize: number) {
+          return {
+            commands: [
+              { type: "M", x, y },
+              { type: "L", x: x + fontSize * 0.5, y },
+              { type: "L", x: x + fontSize * 0.5, y: y - fontSize },
+              { type: "L", x, y: y - fontSize },
+              { type: "Z" },
+            ],
+          };
+        },
+      };
+    },
+  },
+} satisfies TextOutlineFont;
+
+function testOutlineFont(): VasaFont {
+  const family = "Parity";
+  const metrics = createStandardFontMetrics({ family });
+
+  return testFont({
+    id: "parity-400",
+    family,
+    displayName: family,
+    cssFamily: `${family}, Arial, sans-serif`,
+    data: {
+      kind: "outline",
+      bytes: new Uint8Array(),
+      metrics,
+      outlineFont: parityOutlineFont,
+    },
+    outlineFont: parityOutlineFont,
+  });
+}
+
+function webGlParityScene(doc: EditorJson) {
+  const font = testOutlineFont();
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const contract = createEditorRenderDocument({
+    doc,
+    page: { width: 360, height: 360, margin: 24 },
+    profile,
+    measurer: createEditorRenderTextMeasurer(profile),
+    createRenderDocument,
+  });
+
+  return buildCanvasScene(contract.renderDocument, { text: contract.canvasTextPaint });
+}
+
+function canvasTextLines(scene: CanvasScene) {
+  return scene.pages.flatMap((page) => flattenCanvasTextLines(page.children));
+}
+
+function flattenCanvasTextLines(nodes: CanvasNode[]): Extract<CanvasNode, { kind: "textLine" }>[] {
+  return nodes.flatMap((node) => {
+    if (node.kind === "textLine") return [node];
+    if (node.kind === "box") return flattenCanvasTextLines(node.children);
+    return [];
+  });
+}
+
+function fontSizeFromCanvasFont(font: string) {
+  const match = font.match(/(\d+(?:\.\d+)?)px/);
+  return match === null ? 0 : Number.parseFloat(match[1]);
 }
 
 function editorTiptapExtensions() {
@@ -1375,6 +1462,117 @@ test("renders empty headings with the heading font attributes", () => {
       },
     ],
   });
+});
+
+test("keeps underline and strikethrough in the WebGL parity geometry", () => {
+  const scene = webGlParityScene({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Under", marks: [{ type: "underline" }] },
+          { type: "text", text: " " },
+          { type: "text", text: "Strike", marks: [{ type: "strike" }] },
+        ],
+      },
+    ],
+  });
+  const lines = canvasTextLines(scene);
+
+  expect(lines.find((line) => line.text === "Under")).toMatchObject({
+    textDecorationLine: "underline",
+  });
+  expect(lines.find((line) => line.text === "Strike")).toMatchObject({
+    textDecorationLine: "line-through",
+  });
+  const analysis = analyzeWebGlScene(scene);
+  const underline = analysis.decorationPrimitives.find((primitive) => primitive.text === "Under");
+  const strike = analysis.decorationPrimitives.find((primitive) => primitive.text === "Strike");
+
+  expect(underline).toMatchObject({
+    text: "Under",
+    line: "underline",
+    rect: { height: 1 },
+  });
+  expect(strike).toMatchObject({
+    text: "Strike",
+    line: "line-through",
+    rect: { height: 1 },
+  });
+  expect(underline?.rect.y).toBeGreaterThan(lines.find((line) => line.text === "Under")?.y ?? 0);
+  expect(strike?.rect.y).toBeGreaterThan(lines.find((line) => line.text === "Strike")?.y ?? 0);
+});
+
+test("keeps subscript and superscript smaller in the WebGL parity geometry", () => {
+  const scene = webGlParityScene({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          { type: "text", text: "Base" },
+          { type: "text", text: "Sub", marks: [{ type: "subscript" }] },
+          { type: "text", text: "Super", marks: [{ type: "superscript" }] },
+        ],
+      },
+    ],
+  });
+  const lines = canvasTextLines(scene);
+  const base = lines.find((line) => line.text === "Base");
+  const subscript = lines.find((line) => line.text === "Sub");
+  const superscript = lines.find((line) => line.text === "Super");
+  const analysis = analyzeWebGlScene(scene);
+  const basePrimitive = analysis.textPrimitives.find((primitive) => primitive.text === "Base");
+  const subscriptPrimitive = analysis.textPrimitives.find((primitive) => primitive.text === "Sub");
+  const superscriptPrimitive = analysis.textPrimitives.find(
+    (primitive) => primitive.text === "Super",
+  );
+
+  expect(fontSizeFromCanvasFont(subscript?.font ?? "")).toBeLessThan(
+    fontSizeFromCanvasFont(base?.font ?? ""),
+  );
+  expect(fontSizeFromCanvasFont(superscript?.font ?? "")).toBeLessThan(
+    fontSizeFromCanvasFont(base?.font ?? ""),
+  );
+  expect(subscript?.y).toBeGreaterThan(base?.y ?? 0);
+  expect(superscript?.y).toBeLessThan(base?.y ?? Number.POSITIVE_INFINITY);
+  expect(subscriptPrimitive?.fontSize).toBeLessThan(basePrimitive?.fontSize ?? 0);
+  expect(superscriptPrimitive?.fontSize).toBeLessThan(basePrimitive?.fontSize ?? 0);
+  expect(subscriptPrimitive?.bounds.height).toBeLessThan(basePrimitive?.bounds.height ?? 0);
+  expect(superscriptPrimitive?.bounds.height).toBeLessThan(basePrimitive?.bounds.height ?? 0);
+});
+
+test("keeps heading text larger than body text in the WebGL parity geometry", () => {
+  const scene = webGlParityScene({
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1 },
+        content: [{ type: "text", text: "Heading" }],
+      },
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: "Body" }],
+      },
+    ],
+  });
+  const lines = canvasTextLines(scene);
+  const heading = lines.find((line) => line.text === "Heading");
+  const body = lines.find((line) => line.text === "Body");
+  const analysis = analyzeWebGlScene(scene);
+  const headingPrimitive = analysis.textPrimitives.find(
+    (primitive) => primitive.text === "Heading",
+  );
+  const bodyPrimitive = analysis.textPrimitives.find((primitive) => primitive.text === "Body");
+
+  expect(fontSizeFromCanvasFont(heading?.font ?? "")).toBeGreaterThan(
+    fontSizeFromCanvasFont(body?.font ?? ""),
+  );
+  expect(analysis.textTriangleCount).toBeGreaterThan(0);
+  expect(headingPrimitive?.fontSize).toBeGreaterThan(bodyPrimitive?.fontSize ?? 0);
+  expect(headingPrimitive?.bounds.height).toBeGreaterThan(bodyPrimitive?.bounds.height ?? 0);
 });
 
 test("mutates text through editor selections", () => {

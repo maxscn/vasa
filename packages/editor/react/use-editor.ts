@@ -21,6 +21,7 @@ import {
 } from "@vasa/layout";
 import type { PdfRendererExtension } from "@vasa/pdf";
 import { createRenderDocument, type RenderDocument } from "@vasa/renderer";
+import { canUseWebGlRenderer, renderWebGlScene } from "@vasa/webgl";
 import { useEditor as useTiptapEditor, type UseEditorOptions } from "@tiptap/react";
 import { useEffect, useMemo, useRef, useState, type DependencyList } from "react";
 import {
@@ -85,6 +86,7 @@ export type EditorConfig = {
   extensions?: Array<
     VasaExtension<{
       canvas: CanvasRendererExtension;
+      webgl: CanvasRendererExtension;
       pdf: PdfRendererExtension;
     }>
   >;
@@ -92,6 +94,9 @@ export type EditorConfig = {
   fontFamilies?: Array<string | FontDescriptor>;
   fontSizeOptions: number[];
   initialColor?: string;
+  canvasTextMode?: "native" | "outline" | "webgl";
+  canvasBitmapScale?: number;
+  outlinePixelSnap?: number;
   pageBackground?: string;
   showPageMarginGuides?: boolean;
   textColor?: string;
@@ -146,6 +151,7 @@ export function useEditor({ config }: EditorProps) {
   const storedMarks = editorSession.storedMarks;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const webGlTextCanvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
   const editorSessionRef = useRef(editorSession);
   const marginDragRef = useRef<PageMarginGuide | undefined>(undefined);
   const editorFontFamilies = useMemo(
@@ -170,6 +176,13 @@ export function useEditor({ config }: EditorProps) {
     (text: string, font?: string) => number
   >(() => (text: string) => text.length * config.textCharWidth);
   const [isEditorInputFocused, setIsEditorInputFocused] = useState(false);
+  const [supportsWebGlText, setSupportsWebGlText] = useState(false);
+  useEffect(() => {
+    setSupportsWebGlText(canUseWebGlRenderer());
+  }, []);
+  const canvasTextMode =
+    config.canvasTextMode === "webgl" && !supportsWebGlText ? "native" : config.canvasTextMode;
+  const canvasBitmapScale = useCanvasBitmapScale(config.canvasBitmapScale ?? 1);
   const editorCanvasFont = useMemo(
     () => createCanvasFontValue(defaultRenderFont, { fontSize: config.textFontSize }),
     [defaultRenderFont, config.textFontSize],
@@ -181,6 +194,7 @@ export function useEditor({ config }: EditorProps) {
       fallbackFont: config.fallbackFont,
       fontSize: config.textFontSize,
       lineHeight: config.textLineHeight,
+      outlinePixelSnap: config.outlinePixelSnap,
       textColor,
       whiteSpace: "pre-wrap" as const,
       wordBreak: "normal" as const,
@@ -189,6 +203,7 @@ export function useEditor({ config }: EditorProps) {
       config.fallbackFont,
       config.textFontSize,
       config.textLineHeight,
+      config.outlinePixelSnap,
       defaultRenderFont.id,
       editorFonts.fonts,
       textColor,
@@ -250,11 +265,47 @@ export function useEditor({ config }: EditorProps) {
     () => collectExtensionRenderers(documentExtensions, "canvas"),
     [],
   );
+  const preferredCanvasSceneRenderers = useMemo(
+    () =>
+      canvasTextMode === "webgl"
+        ? preferredExtensionRenderers(documentExtensions, "webgl", "canvas")
+        : canvasRenderers,
+    [canvasRenderers, canvasTextMode, documentExtensions],
+  );
+  const webGlTextPaint = useMemo(() => {
+    if (canvasTextMode !== "webgl") return editorRenderContract.canvasTextPaint;
+
+    return (...args: Parameters<typeof editorRenderContract.canvasTextPaint>) => {
+      const paint = editorRenderContract.canvasTextPaint(...args);
+      return {
+        ...paint,
+        pixelSnap: config.outlinePixelSnap ?? 1,
+      };
+    };
+  }, [canvasTextMode, config.outlinePixelSnap, editorRenderContract.canvasTextPaint]);
   const canvasScene = useMemo(
     () =>
-      buildCanvasScene(renderDocument, { pageGap: config.pageGap, extensions: canvasRenderers }),
-    [canvasRenderers, config.pageGap, renderDocument],
+      buildCanvasScene(renderDocument, {
+        pageGap: config.pageGap,
+        extensions: preferredCanvasSceneRenderers,
+        text: webGlTextPaint,
+      }),
+    [config.pageGap, preferredCanvasSceneRenderers, renderDocument, webGlTextPaint],
   );
+  const canvasTextPaint = useMemo(() => {
+    if (canvasTextMode !== "native" && canvasTextMode !== "webgl")
+      return editorRenderContract.canvasTextPaint;
+
+    return (...args: Parameters<typeof editorRenderContract.canvasTextPaint>) => {
+      const paint = editorRenderContract.canvasTextPaint(...args);
+      return {
+        ...paint,
+        fill: canvasTextMode === "webgl" ? "rgb(0 0 0 / 0)" : paint.fill,
+        outlineFont: undefined,
+        pixelSnap: config.outlinePixelSnap ?? 1,
+      };
+    };
+  }, [canvasTextMode, config.outlinePixelSnap, editorRenderContract.canvasTextPaint]);
   const showPageMarginGuides = config.showPageMarginGuides ?? true;
   useEffect(() => {
     const canvas = document.createElement("canvas");
@@ -283,7 +334,7 @@ export function useEditor({ config }: EditorProps) {
       config.page.height,
       ...canvasScene.pages.map((pageItem) => pageItem.rect.y + pageItem.rect.height),
     );
-    const scale = window.devicePixelRatio || 1;
+    const scale = canvasBitmapScale;
     canvas.width = Math.ceil(width * scale);
     canvas.height = Math.ceil(height * scale);
     canvas.style.width = `${width}px`;
@@ -294,8 +345,34 @@ export function useEditor({ config }: EditorProps) {
       pageBackground,
       pageGap: config.pageGap,
       extensions: canvasRenderers,
-      text: editorRenderContract.canvasTextPaint,
+      text: canvasTextPaint,
     }).render(renderDocument);
+    if (canvasTextMode === "webgl") {
+      const webGlTextCanvas = webGlTextCanvasRef.current ?? document.createElement("canvas");
+      webGlTextCanvasRef.current = webGlTextCanvas;
+      webGlTextCanvas.width = canvas.width;
+      webGlTextCanvas.height = canvas.height;
+
+      const webGlResult = renderWebGlScene(webGlTextCanvas, canvasScene, {
+        pixelRatio: scale,
+      });
+      if (webGlResult !== false && webGlResult.didRenderText) {
+        context.save();
+        context.setTransform(1, 0, 0, 1, 0, 0);
+        context.drawImage(webGlTextCanvas, 0, 0);
+        context.restore();
+      } else {
+        createCanvasRenderer(textOnlyCanvasSurface(context, editorCanvasFont), {
+          pageBackground: "rgb(0 0 0 / 0)",
+          pageGap: config.pageGap,
+          extensions: canvasRenderers,
+          text: (...args: Parameters<typeof editorRenderContract.canvasTextPaint>) => {
+            const paint = editorRenderContract.canvasTextPaint(...args);
+            return { ...paint, outlineFont: undefined, pixelSnap: config.outlinePixelSnap ?? 1 };
+          },
+        }).render(renderDocument);
+      }
+    }
     if (showPageMarginGuides) {
       paintPageMarginGuides(context, renderDocument, config.pageGap, scale);
     }
@@ -326,13 +403,16 @@ export function useEditor({ config }: EditorProps) {
   }, [
     canvasScene,
     canvasRenderers,
+    canvasBitmapScale,
+    canvasTextPaint,
+    canvasTextMode,
     editorCanvasFont,
-    editorRenderContract.canvasTextPaint,
     editorRenderMeasureText,
     isEditorInputFocused,
     shouldPaintSelection,
     renderDocument,
     selection,
+    config.page,
     config.pageGap,
     showPageMarginGuides,
   ]);
@@ -605,6 +685,9 @@ export function useEditor({ config }: EditorProps) {
 
   return {
     canvasRef,
+    canvasBitmapScale,
+    canvasTextMode: canvasTextMode ?? "outline",
+    configPageGap: config.pageGap,
     canvasSelection: selection,
     cursorPosition: selection,
     editorDocument,
@@ -664,6 +747,26 @@ export function useEditor({ config }: EditorProps) {
 
 export type UseEditorReturn = ReturnType<typeof useEditor>;
 
+function textOnlyCanvasSurface(
+  context: CanvasRenderingContext2D,
+  defaultFont: string,
+): ReturnType<typeof domCanvasSurface> {
+  const surface = domCanvasSurface(context, defaultFont);
+  return {
+    ...surface,
+    clearRect: () => undefined,
+    fillRect: () => undefined,
+    strokeRect: () => undefined,
+    beginPath: () => undefined,
+    moveTo: () => undefined,
+    lineTo: () => undefined,
+    bezierCurveTo: () => undefined,
+    closePath: () => undefined,
+    fill: () => undefined,
+    stroke: () => undefined,
+  };
+}
+
 function canvasPointForEvent(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
   const rect = canvas.getBoundingClientRect();
   const surfaceWidth = Number.parseFloat(canvas.style.width);
@@ -689,6 +792,22 @@ function normalizeLineHeightOptions(options: number[] | undefined, selectedLineH
     .sort((left, right) => left - right);
 }
 
+function preferredExtensionRenderers<
+  TRenderers extends Record<string, unknown>,
+  TPreferred extends keyof TRenderers,
+  TFallback extends keyof TRenderers,
+>(
+  extensions: Array<VasaExtension<TRenderers>>,
+  preferred: TPreferred,
+  fallback: TFallback,
+): Array<TRenderers[TPreferred] | TRenderers[TFallback]> {
+  return extensions.flatMap((extension) => {
+    const renderer = extension.renderers?.[preferred] ?? extension.renderers?.[fallback];
+    if (renderer === undefined) return [];
+    return Array.isArray(renderer) ? renderer : [renderer];
+  });
+}
+
 function renderNodeBottomY(node: unknown): number {
   if (!isRenderNodeLike(node)) return 0;
 
@@ -707,6 +826,51 @@ function isRenderNodeLike(
     "children" in node &&
     Array.isArray((node as { children?: unknown }).children)
   );
+}
+
+function useCanvasBitmapScale(multiplier: number) {
+  const [scale, setScale] = useState(() => currentCanvasBitmapScale(multiplier));
+
+  useEffect(() => {
+    let media: MediaQueryList | undefined;
+
+    function update() {
+      setScale(currentCanvasBitmapScale(multiplier));
+    }
+
+    function subscribeDprChange() {
+      media?.removeEventListener("change", handleDprChange);
+      media = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      media.addEventListener("change", handleDprChange);
+    }
+
+    function handleDprChange() {
+      update();
+      subscribeDprChange();
+    }
+
+    update();
+    subscribeDprChange();
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+
+    return () => {
+      media?.removeEventListener("change", handleDprChange);
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, [multiplier]);
+
+  return scale;
+}
+
+function currentCanvasBitmapScale(multiplier: number) {
+  if (typeof window === "undefined") return Math.max(1, multiplier);
+
+  const pixelRatio = window.devicePixelRatio || 1;
+  const viewportScale = window.visualViewport?.scale ?? 1;
+  const scale = pixelRatio * viewportScale * Math.max(1, multiplier);
+  return Math.min(4, Math.max(1, Number(scale.toFixed(3))));
 }
 
 function paintPageMarginGuides(

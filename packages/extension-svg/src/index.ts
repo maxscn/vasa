@@ -20,6 +20,7 @@ export type SvgNode = LayoutNodeBase<"svg"> & {
 
 export type SvgExtensionRenderers = {
   canvas: CanvasRendererExtension;
+  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 
@@ -58,6 +59,11 @@ export function createSvgExtension(
       canvas: mergeRenderers(
         defaultSvgRenderers.canvas,
         options.renderers?.canvas,
+        options.rendererPlacement,
+      ),
+      webgl: mergeRenderers(
+        defaultSvgRenderers.webgl,
+        options.renderers?.webgl,
         options.rendererPlacement,
       ),
       pdf: mergeRenderers(
@@ -107,6 +113,7 @@ const svgRenderExtension = {
 
 const defaultSvgRenderers = {
   canvas: svgCanvasRenderer,
+  webgl: svgCanvasRenderer,
   pdf: svgPdfRenderer,
 } satisfies SvgExtensionRenderers;
 

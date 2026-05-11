@@ -60,6 +60,7 @@ export async function rasterizePdfPreview(
   pdfWorkerUrl: string,
   pageGap: number,
   isCancelled: () => boolean = () => false,
+  bitmapScale = 1,
 ) {
   const { GlobalWorkerOptions, getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -83,7 +84,7 @@ export async function rasterizePdfPreview(
     );
     if (isCancelled()) return;
 
-    const pixelRatio = window.devicePixelRatio || 1;
+    const pixelRatio = currentBrowserBitmapScale(bitmapScale);
     const width = Math.max(...pages.map(({ viewport }) => viewport.width));
     const height = pages.reduce(
       (total, { viewport }, index) => total + viewport.height + (index === 0 ? 0 : pageGap),
@@ -127,6 +128,15 @@ export async function rasterizePdfPreview(
   } finally {
     await pdf.destroy();
   }
+}
+
+export function currentBrowserBitmapScale(multiplier = 1) {
+  if (typeof window === "undefined") return Math.max(1, multiplier);
+
+  const pixelRatio = window.devicePixelRatio || 1;
+  const viewportScale = window.visualViewport?.scale ?? 1;
+  const scale = pixelRatio * viewportScale * Math.max(1, multiplier);
+  return Math.min(4, Math.max(1, Number(scale.toFixed(3))));
 }
 
 export function hitTestCanvas(

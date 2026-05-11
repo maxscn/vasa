@@ -99,6 +99,7 @@ export type CanvasTextLineNode = {
   textDecorationOffset?: number;
   textDecorationThickness?: number;
   outline?: TextOutlinePath;
+  pixelSnap?: number;
 };
 
 export type CanvasPathNode = {
@@ -143,6 +144,7 @@ export type CanvasTextPaint = {
   fontSize?: number;
   letterSpacing?: number;
   embolden?: number;
+  pixelSnap?: number;
   skewX?: number;
 };
 
@@ -631,6 +633,7 @@ function buildCanvasNodes(
         ...(line.textDecorationColor === undefined
           ? {}
           : { textDecorationColor: line.textDecorationColor }),
+        ...(paint.pixelSnap === undefined ? {} : { pixelSnap: paint.pixelSnap }),
         ...(paint.outlineFont === undefined
           ? {}
           : {
@@ -741,6 +744,7 @@ function renderTextNodeToCanvasNodes(
       ...(line.textDecorationThickness === undefined
         ? {}
         : { textDecorationThickness: line.textDecorationThickness }),
+      ...(paint.pixelSnap === undefined ? {} : { pixelSnap: paint.pixelSnap }),
       ...(paint.outlineFont === undefined
         ? {}
         : {
@@ -788,8 +792,8 @@ function appendNodeCommands(commands: CanvasCommand[], nodes: CanvasNode[]) {
       commands.push({
         type: "fillText",
         text: node.text,
-        x: node.x,
-        y: node.y,
+        x: snapCanvasTextCoordinate(node.x, node.pixelSnap),
+        y: snapCanvasTextCoordinate(node.y, node.pixelSnap),
         font: node.font,
         fill: node.fill,
       });
@@ -799,6 +803,11 @@ function appendNodeCommands(commands: CanvasCommand[], nodes: CanvasNode[]) {
 
     appendTextDecorationCommands(commands, node);
   }
+}
+
+function snapCanvasTextCoordinate(value: number, pixelSnap: number | undefined) {
+  if (pixelSnap === undefined || pixelSnap <= 0) return value;
+  return Math.round(value / pixelSnap) * pixelSnap;
 }
 
 function appendTextBackgroundCommands(commands: CanvasCommand[], node: CanvasTextLineNode) {
@@ -829,15 +838,22 @@ function textDecorationRect(
 ): Rect {
   const horizontal = snappedTextHorizontalRect(node, outline);
   const thickness = node.textDecorationThickness ?? Math.max(1, Math.round(fontSize * 0.06));
+  const bounds = outline === undefined ? undefined : textOutlinePathBounds(outline);
   const fallbackOffset =
     node.textDecorationLine === "line-through"
       ? fontSize * 0.6
       : Math.min(node.height - thickness, fontSize);
   const offset = node.textDecorationOffset ?? fallbackOffset;
+  const y =
+    bounds === undefined
+      ? Math.round(node.y + offset)
+      : node.textDecorationLine === "line-through"
+        ? Math.round(bounds.y + bounds.height / 2 - thickness / 2)
+        : Math.max(Math.round(node.y + offset), Math.floor(bounds.y + bounds.height));
 
   return {
     x: horizontal.x,
-    y: Math.round(node.y + offset),
+    y,
     width: horizontal.width,
     height: thickness,
   };

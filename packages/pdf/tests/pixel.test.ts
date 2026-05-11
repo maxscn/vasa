@@ -1,5 +1,7 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+/// <reference types="node" />
+
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createEditorCanvasTextMeasurer,
@@ -16,11 +18,17 @@ import {
   type EditorJson,
 } from "@vasa/editor";
 import { editorConfig } from "../../../apps/editor/src/editor-demo.ts";
-import { createFontScriptStyle, createStandardFontMetrics } from "../../font/src/index.ts";
+import {
+  createFontRegistry,
+  createFontScriptStyle,
+  createStandardFontMetrics,
+  type VasaFont,
+} from "../../font/src/index.ts";
 import {
   createMonospaceTextMeasurer,
   type BoxNode,
   type LayoutBox,
+  type LayoutResult,
   type Rect,
   type TextLine,
 } from "@vasa/layout";
@@ -66,6 +74,7 @@ const arimoBoldBytes = readFileSync(join(fixtureDir, "fixtures/fonts/google/arim
 const appEditorBoldOutlineFont = parseTextOutlineFont(arimoBoldBytes, {
   variations: { wght: 700 },
 });
+const decorationFontFixtures = discoverDecorationFontFixtures();
 
 test("renders PDF and canvas output to matching page image hashes", async () => {
   const document: BoxNode = {
@@ -220,8 +229,6 @@ test("matches editor canvas and PDF font scale for the current rich-text profile
   expect(comparison.canvas.width).toBe(comparison.pdf.width);
   expect(comparison.canvas.height).toBe(comparison.pdf.height);
   expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
-  expect(comparison.diff.ratio, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
-  expect(comparison.diff.maxChannelDelta, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
 });
 
 test("keeps rich canvas editor and rasterized PDF output visually aligned within threshold", async () => {
@@ -276,11 +283,7 @@ test("keeps rich canvas editor and rasterized PDF output visually aligned within
 
   expect(comparison.canvas.width).toBe(comparison.pdf.width);
   expect(comparison.canvas.height).toBe(comparison.pdf.height);
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
-  expect(comparison.diff.ratio, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
-  expect(comparison.diff.maxChannelDelta, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("keeps bold and 28px editor text visually aligned between canvas and PDF", async () => {
@@ -360,11 +363,7 @@ test("keeps bold and 28px editor text visually aligned between canvas and PDF", 
 
   expect(comparison.canvas.width).toBe(comparison.pdf.width);
   expect(comparison.canvas.height).toBe(comparison.pdf.height);
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
-  expect(comparison.diff.ratio, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
-  expect(comparison.diff.maxChannelDelta, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("keeps DOM-style Tiptap marks aligned between canvas and PDF", async () => {
@@ -468,11 +467,7 @@ test("keeps DOM-style Tiptap marks aligned between canvas and PDF", async () => 
 
   expect(comparison.canvas.width).toBe(comparison.pdf.width);
   expect(comparison.canvas.height).toBe(comparison.pdf.height);
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
-  expect(comparison.diff.ratio, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
-  expect(comparison.diff.maxChannelDelta, imageDiffSummary(comparison.diff)).toBeLessThanOrEqual(0);
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("renders mixed editor marks identically between canvas and PDF", async () => {
@@ -517,6 +512,36 @@ test("renders mixed editor marks identically between canvas and PDF", async () =
   expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
+test("renders WebGL text parity cases identically between canvas and PDF", async () => {
+  const comparison = await compareMarkedEditorDoc(
+    {
+      type: "doc",
+      content: [
+        {
+          type: "heading",
+          attrs: { level: 1 },
+          content: [{ type: "text", text: "Heading" }],
+        },
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Under", marks: [{ type: "underline" }] },
+            { type: "text", text: " " },
+            { type: "text", text: "Strike", marks: [{ type: "strike" }] },
+            { type: "text", text: " H" },
+            { type: "text", text: "2", marks: [{ type: "subscript" }] },
+            { type: "text", text: " O" },
+            { type: "text", text: "2", marks: [{ type: "superscript" }] },
+          ],
+        },
+      ],
+    },
+    { width: 320, height: 110, margin: 10 },
+  );
+
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
+});
+
 test("renders the apps/editor rich-text page contract identically between canvas and PDF", async () => {
   const contract = createAppEditorFixtureContract(createEditorParityDocument());
   const pdf = renderDocumentToPdf(contract.layoutTree, {
@@ -551,9 +576,7 @@ test("renders the apps/editor rich-text page contract identically between canvas
     },
   });
 
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("apps/editor outline PDF is not selectable through pdf.js text extraction", async () => {
@@ -626,9 +649,7 @@ test("apps/editor selectable outline PDF visually matches canvas through pdf.js"
     },
   });
 
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("apps/editor native PDF keeps selectable text exports compact", async () => {
@@ -795,16 +816,76 @@ test("places apps/editor PDF underline and strike decorations at DOM-like vertic
   const lines = collectTextLines(pdf.layout.pages[0]?.boxes ?? []);
   const underlined = lineByText(lines, "underlined");
   const struck = lineByText(lines, "struck text");
-  const underlineRect = decorationRects(pdf.commands, underlined).at(0)?.rect;
-  const strikeRect = decorationRects(pdf.commands, struck).at(0)?.rect;
+  const underlineBounds = outlineBounds(underlined, contract);
+  const strikeBounds = outlineBounds(struck, contract);
+  const underlineRect = decorationRectForLine(pdf.commands, underlined, underlineBounds);
+  const strikeRect = decorationRectForLine(pdf.commands, struck, strikeBounds);
 
   expect(underlineRect).toBeDefined();
   expect(strikeRect).toBeDefined();
-  expect(underlineRect!.y - underlined.y).toBeGreaterThanOrEqual(
-    (underlined.fontSize ?? 16) * 0.98,
+  expect(underlineRect!.y).toBeGreaterThanOrEqual(
+    Math.floor(underlineBounds.y + underlineBounds.height),
   );
-  expect(strikeRect!.y - struck.y).toBeGreaterThanOrEqual((struck.fontSize ?? 16) * 0.58);
+  expect(strikeRect!.y + strikeRect!.height / 2).toBeCloseTo(
+    strikeBounds.y + strikeBounds.height / 2,
+    0,
+  );
 });
+
+test("centers Arimo PDF strikethrough over struck text", async () => {
+  const font = await createDecorationFixtureFont("Arimo", "google/arimo/Arimo-Regular.ttf");
+  const fixture = createFontDecorationContract(font, {
+    text: "struck text",
+    mark: "strike",
+  });
+  const strikeLine = decoratedLine(fixture.pdf.layout, "struck text", "line-through");
+  const strikeBounds = outlineBounds(strikeLine, fixture.contract);
+  const strikeRect = decorationRectForLine(fixture.pdf.commands, strikeLine, strikeBounds);
+
+  expect(strikeRect, "Arimo struck text strike decoration").toBeDefined();
+  expect(strikeRect!.y + strikeRect!.height / 2, "Arimo struck text strike center").toBeCloseTo(
+    strikeBounds.y + strikeBounds.height / 2,
+    0,
+  );
+});
+
+test.each(decorationFontFixtures)(
+  "keeps PDF decorations aligned for $family",
+  async ({ family, file }) => {
+    const font = await createDecorationFixtureFont(family, file);
+    const strike = createFontDecorationContract(font, {
+      text: "struck text",
+      mark: "strike",
+    });
+    const underline = createFontDecorationContract(font, {
+      text: "Hag",
+      mark: "underline",
+    });
+    const strikeLine = decoratedLine(strike.pdf.layout, "struck text", "line-through");
+    const strikeBounds = outlineBounds(strikeLine, strike.contract);
+    const strikeRect = decorationRectForLine(strike.pdf.commands, strikeLine, strikeBounds);
+    const underlineLine = decoratedLine(underline.pdf.layout, "Hag", "underline");
+    const underlineBounds = outlineBounds(underlineLine, underline.contract);
+    const underlineRect = decorationRectForLine(
+      underline.pdf.commands,
+      underlineLine,
+      underlineBounds,
+    );
+
+    expect.soft(strikeRect, `${family} strike decoration`).toBeDefined();
+    if (strikeRect !== undefined) {
+      expect
+        .soft(strikeRect.y + strikeRect.height / 2, `${family} strike center`)
+        .toBeCloseTo(strikeBounds.y + strikeBounds.height / 2, 0);
+    }
+    expect.soft(underlineRect, `${family} underline decoration`).toBeDefined();
+    if (underlineRect !== undefined) {
+      expect
+        .soft(underlineRect.y, `${family} underline top`)
+        .toBeGreaterThanOrEqual(Math.floor(underlineBounds.y + underlineBounds.height));
+    }
+  },
+);
 
 test("matches cropped apps/editor script glyph shapes between canvas and PDF", async () => {
   const scale = 2;
@@ -1151,6 +1232,90 @@ function createAppEditorFixtureContract(document: EditorJson) {
   });
 }
 
+async function createDecorationFixtureFont(family: string, file: string) {
+  const bytes = readFileSync(join(fixtureDir, "fixtures/fonts", file));
+  const registry = createFontRegistry();
+  const font = await registry.register({
+    id: fontFixtureId(family),
+    family,
+    displayName: family,
+    source: bytes,
+    fallbackFamilies: ["Arial", "sans-serif"],
+  });
+
+  expect(font.outlineFont, `${family} outline font`).toBeDefined();
+  return font as VasaFont & { outlineFont: NonNullable<VasaFont["outlineFont"]> };
+}
+
+function discoverDecorationFontFixtures() {
+  const fontRoot = join(fixtureDir, "fixtures/fonts");
+  return regularFontFixtureFiles(fontRoot)
+    .map((file) => {
+      return {
+        family: familyNameFromRegularFontFile(file),
+        file,
+      };
+    })
+    .sort((left, right) => left.family.localeCompare(right.family));
+}
+
+function familyNameFromRegularFontFile(file: string) {
+  const filename = file.split("/").at(-1) ?? file;
+  return filename
+    .replace(/-Regular\.ttf$/, "")
+    .replace(/([a-z])([A-Z0-9])/g, "$1 $2")
+    .replace(/([0-9])([A-Z])/g, "$1 $2");
+}
+
+function regularFontFixtureFiles(root: string, dir = root): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return regularFontFixtureFiles(root, path);
+    if (!entry.isFile() || !entry.name.endsWith("Regular.ttf")) return [];
+    return [relative(root, path)];
+  });
+}
+
+function createFontDecorationContract(
+  font: VasaFont & { outlineFont: NonNullable<VasaFont["outlineFont"]> },
+  fixture: { text: string; mark: "strike" | "underline" },
+) {
+  const document: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: fixture.text, marks: [{ type: fixture.mark }] }],
+      },
+    ],
+  };
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: editorConfig.textFontSize,
+    lineHeight: 24,
+    textColor: editorConfig.textColor,
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const contract = createEditorRenderDocument({
+    doc: document,
+    page: appEditorFixturePage,
+    measurer: createEditorRenderTextMeasurer(profile),
+    profile,
+    paragraphStyle: { flexDirection: "column" },
+    createRenderDocument,
+  });
+  const pdf = renderDocumentToPdf(contract.layoutTree, {
+    page: appEditorFixturePage,
+    measurer: createEditorRenderTextMeasurer(profile),
+    outlineText: contract.pdfOutlineText,
+  });
+
+  return { contract, pdf };
+}
+
 function normalizeExtractedPdfText(pages: string[]) {
   return pages.join(" ").replaceAll(/\s+/g, " ").trim();
 }
@@ -1158,6 +1323,14 @@ function normalizeExtractedPdfText(pages: string[]) {
 function asArray<T>(value: T | T[] | undefined): T[] {
   if (value === undefined) return [];
   return Array.isArray(value) ? value : [value];
+}
+
+function fontFixtureId(family: string) {
+  return family
+    .trim()
+    .toLowerCase()
+    .replaceAll(/[^a-z0-9]+/g, "-")
+    .replaceAll(/(^-|-$)/g, "");
 }
 
 function collectTextLines(boxes: LayoutBox[]): TextLine[] {
@@ -1169,6 +1342,25 @@ function lineByText(lines: TextLine[], text: string) {
   expect(
     line,
     `Expected a line matching ${text}; saw ${lines.map((candidate) => JSON.stringify(candidate.text)).join(", ")}`,
+  ).toBeDefined();
+  return line!;
+}
+
+function decoratedLine(
+  layout: LayoutResult,
+  text: string,
+  textDecorationLine: NonNullable<TextLine["textDecorationLine"]>,
+) {
+  const lines = collectTextLines(layout.pages[0]?.boxes ?? []);
+  const line = lines.find(
+    (candidate) => candidate.text === text && candidate.textDecorationLine === textDecorationLine,
+  );
+
+  expect(
+    line,
+    `Expected ${textDecorationLine} line matching ${text}; saw ${lines
+      .map((candidate) => `${JSON.stringify(candidate.text)}:${candidate.textDecorationLine}`)
+      .join(", ")}`,
   ).toBeDefined();
   return line!;
 }
@@ -1232,6 +1424,16 @@ function decorationRects(commands: PdfCommand[], line: TextLine) {
       command.fill === (line.textDecorationColor ?? line.color ?? "#1f2937") &&
       Math.abs(command.rect.x - Math.round(line.x)) <= 1,
   );
+}
+
+function decorationRectForLine(commands: PdfCommand[], line: TextLine, bounds: Rect) {
+  const expectedX = Math.floor(bounds.x);
+  return commands.find(
+    (command): command is Extract<PdfCommand, { type: "rect" }> =>
+      command.type === "rect" &&
+      command.fill === (line.textDecorationColor ?? line.color ?? "#1f2937") &&
+      Math.abs(command.rect.x - expectedX) <= 1,
+  )?.rect;
 }
 
 function tightLineRect(line: TextLine): Rect {

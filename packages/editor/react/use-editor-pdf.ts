@@ -8,7 +8,11 @@ import {
   type PdfRendererExtension,
 } from "@vasa/pdf";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { bytesToArrayBuffer, rasterizePdfPreview } from "../src/browser.ts";
+import {
+  bytesToArrayBuffer,
+  currentBrowserBitmapScale,
+  rasterizePdfPreview,
+} from "../src/browser.ts";
 
 export type UseEditorPdfOptions = {
   document: BoxNode;
@@ -27,6 +31,7 @@ export type UseEditorPdfOptions = {
   downloadTextMode?: "native" | "outline";
   downloadFileName?: string;
   previewDebounceMs?: number;
+  previewBitmapScale?: number;
 };
 
 const EMPTY_EXTENSIONS: NonNullable<UseEditorPdfOptions["extensions"]> = [];
@@ -35,6 +40,7 @@ export function useEditorPdf(options: UseEditorPdfOptions) {
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const pdfPreviewJobRef = useRef<Promise<void>>(Promise.resolve());
   const [pdfResult, setPdfResult] = useState<PdfRenderResult | undefined>(undefined);
+  const previewBitmapScale = usePdfPreviewBitmapScale(options.previewBitmapScale ?? 1);
   const extensions = options.extensions ?? EMPTY_EXTENSIONS;
   const pdfRenderers = useMemo(() => collectExtensionRenderers(extensions, "pdf"), [extensions]);
   const layoutExtensions = useMemo(() => collectLayoutExtensions(extensions), [extensions]);
@@ -71,6 +77,7 @@ export function useEditorPdf(options: UseEditorPdfOptions) {
               options.pdfWorkerUrl,
               options.pageGap,
               () => cancelled,
+              options.previewBitmapScale,
             );
           }
         });
@@ -91,8 +98,10 @@ export function useEditorPdf(options: UseEditorPdfOptions) {
     options.page,
     options.pageGap,
     options.pdfWorkerUrl,
+    options.previewBitmapScale,
     options.previewDebounceMs,
     pdfRenderers,
+    previewBitmapScale,
   ]);
 
   async function renderPdf() {
@@ -132,3 +141,39 @@ export function useEditorPdf(options: UseEditorPdfOptions) {
 }
 
 export type UseEditorPdfReturn = ReturnType<typeof useEditorPdf>;
+
+function usePdfPreviewBitmapScale(multiplier: number) {
+  const [scale, setScale] = useState(() => currentBrowserBitmapScale(multiplier));
+
+  useEffect(() => {
+    let media: MediaQueryList | undefined;
+
+    function update() {
+      setScale(currentBrowserBitmapScale(multiplier));
+    }
+
+    function subscribeDprChange() {
+      media?.removeEventListener("change", handleDprChange);
+      media = window.matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`);
+      media.addEventListener("change", handleDprChange);
+    }
+
+    function handleDprChange() {
+      update();
+      subscribeDprChange();
+    }
+
+    update();
+    subscribeDprChange();
+    window.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("resize", update);
+
+    return () => {
+      media?.removeEventListener("change", handleDprChange);
+      window.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, [multiplier]);
+
+  return scale;
+}

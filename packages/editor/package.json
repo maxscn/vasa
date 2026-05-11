@@ -59,6 +59,7 @@
     "@vasa/layout": "workspace:*",
     "@vasa/pdf": "workspace:*",
     "@vasa/renderer": "workspace:*",
+    "@vasa/webgl": "workspace:*",
     "lucide-react": "^0.545.0",
     "pdfjs-dist": "catalog:",
     "react": "^19.2.0"

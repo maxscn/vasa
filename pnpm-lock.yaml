@@ -467,6 +467,9 @@ importers:
       '@vasa/renderer':
         specifier: workspace:*
         version: link:../renderer
+      '@vasa/webgl':
+        specifier: workspace:*
+        version: link:../webgl
       lucide-react:
         specifier: ^0.545.0
         version: 0.545.0(react@19.2.4)
@@ -1106,6 +1109,28 @@ importers:
       bumpp:
         specifier: ^11.0.1
         version: 11.0.1
+      typescript:
+        specifier: ^6.0.2
+        version: 6.0.2
+      vite-plus:
+        specifier: ^0.1.14
+        version: 0.1.15(@opentelemetry/api@1.9.0)(@types/node@25.5.2)(esbuild@0.27.3)(happy-dom@20.8.9)(jiti@2.6.1)(jsdom@28.1.0)(typescript@6.0.2)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.5.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.3))(yaml@2.8.3)
+
+  packages/webgl:
+    dependencies:
+      '@vasa/canvas':
+        specifier: workspace:*
+        version: link:../canvas
+      '@vasa/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+    devDependencies:
+      '@types/node':
+        specifier: ^25.5.0
+        version: 25.5.2
+      '@typescript/native-preview':
+        specifier: 7.0.0-dev.20260328.1
+        version: 7.0.0-dev.20260328.1
       typescript:
         specifier: ^6.0.2
         version: 6.0.2

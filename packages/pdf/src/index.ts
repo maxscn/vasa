@@ -487,15 +487,22 @@ function textDecorationRect(
 ): Rect {
   const horizontal = snappedTextHorizontalRect(line, outline);
   const thickness = line.textDecorationThickness ?? Math.max(1, Math.round(fontSize * 0.06));
+  const bounds = outline === undefined ? undefined : textOutlinePathBounds(outline);
   const fallbackOffset =
     line.textDecorationLine === "line-through"
       ? fontSize * 0.6
       : Math.min(line.height - thickness, fontSize);
   const offset = line.textDecorationOffset ?? fallbackOffset;
+  const y =
+    bounds === undefined
+      ? Math.round(line.y + offset)
+      : line.textDecorationLine === "line-through"
+        ? Math.round(bounds.y + bounds.height / 2 - thickness / 2)
+        : Math.max(Math.round(line.y + offset), Math.floor(bounds.y + bounds.height));
 
   return {
     x: horizontal.x,
-    y: Math.round(line.y + offset),
+    y,
     width: horizontal.width,
     height: thickness,
   };
