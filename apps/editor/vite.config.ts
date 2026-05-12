@@ -7,12 +7,9 @@ import viteReact, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
-import { existsSync, readFileSync } from "node:fs";
-import { extname, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const workspacePackage = (path: string) => fileURLToPath(new URL(path, import.meta.url));
-const fontAssetsRoot = fileURLToPath(new URL("./src/assets/fonts/", import.meta.url));
 
 const config = defineConfig({
   resolve: {
@@ -42,29 +39,6 @@ const config = defineConfig({
     },
   },
   plugins: [
-    {
-      name: "vasa-editor-font-assets",
-      configureServer(server) {
-        server.middlewares.use("/__vasa-assets/fonts/", (request, response, next) => {
-          const requestPath = decodeURIComponent(request.url?.split("?")[0] ?? "");
-          const filePath = normalize(`${fontAssetsRoot}${requestPath}`);
-
-          if (!filePath.startsWith(fontAssetsRoot) || filePath.includes(`${sep}..${sep}`)) {
-            response.statusCode = 403;
-            response.end("Forbidden");
-            return;
-          }
-
-          if (!existsSync(filePath)) {
-            next();
-            return;
-          }
-
-          response.setHeader("Content-Type", contentTypeForFontAsset(filePath));
-          response.end(readFileSync(filePath));
-        });
-      },
-    },
     devtools(),
     nitro({ rollupConfig: { external: [/^@sentry\//] } }),
     tailwindcss(),
@@ -80,11 +54,3 @@ const config = defineConfig({
 });
 
 export default config;
-
-function contentTypeForFontAsset(filePath: string) {
-  if (extname(filePath) === ".ttf") return "font/ttf";
-  if (extname(filePath) === ".otf") return "font/otf";
-  if (extname(filePath) === ".woff") return "font/woff";
-  if (extname(filePath) === ".woff2") return "font/woff2";
-  return "text/plain";
-}

@@ -112,6 +112,7 @@ type InlineMeasuredSegment = {
   start: number;
   width: number;
   leadingGap?: number;
+  trailingWhitespaceWidth?: number;
   style?: TextStyle;
 };
 
@@ -568,6 +569,7 @@ function measureInlineToken(
         text: token.text,
         start: sourceStart + token.start,
         width,
+        trailingWhitespaceWidth: token.text.trim().length === 0 ? width : 0,
         style,
       },
     ];
@@ -593,6 +595,7 @@ function measureInlineToken(
         text: current,
         start: currentStart,
         width: measureInlineText(current, style, measurer).width,
+        trailingWhitespaceWidth: 0,
         style,
       });
       current = character;
@@ -610,6 +613,7 @@ function measureInlineToken(
       text: current,
       start: currentStart,
       width: measureInlineText(current, style, measurer).width,
+      trailingWhitespaceWidth: 0,
       style,
     });
   }
@@ -635,6 +639,7 @@ function trimTrailingInlineWhitespace(line: InlineMeasuredLine, measurer: TextMe
     line.width -= segment.width - trimmedWidth;
     segment.text = trimmedText;
     segment.width = trimmedWidth;
+    segment.trailingWhitespaceWidth = 0;
     return;
   }
 }
@@ -652,6 +657,10 @@ function appendInlineSegment(line: InlineMeasuredLine, segment: InlineMeasuredSe
   ) {
     previous.text += segment.text;
     previous.width += segment.width;
+    previous.trailingWhitespaceWidth =
+      segment.text.trim().length === 0
+        ? (previous.trailingWhitespaceWidth ?? 0) + segment.width
+        : (segment.trailingWhitespaceWidth ?? 0);
   } else {
     line.segments.push(leadingGap === 0 ? segment : { ...segment, leadingGap });
   }
@@ -683,10 +692,12 @@ function inlineStyleBoundaryGap(
   if (!/\s$/u.test(previous.text) || segment.text.trim().length === 0) return 0;
   if (sameInlineStyle(previous.style, segment.style)) return 0;
   if (!isEmphasizedInlineStyle(segment.style)) return 0;
-  return Math.max(
+  const desiredGap = Math.max(
     3,
     Math.min(4, (parseCssFontSize(segment.style?.font) ?? DEFAULT_LINE_HEIGHT) * 0.25),
   );
+  const actualGap = previous.trailingWhitespaceWidth ?? 0;
+  return Math.max(0, desiredGap - actualGap);
 }
 
 function createTextFragment(node: TextNode, lines: TextLine[]): TextNode {

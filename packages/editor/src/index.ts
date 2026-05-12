@@ -637,6 +637,9 @@ export function splitParagraph(
   doc: EditorJson,
   selection: EditorSelection,
 ): { doc: EditorJson; selection: EditorSelection } {
+  const boundaryInserted = insertParagraphAtLargeBlockBoundary(doc, selection);
+  if (boundaryInserted !== undefined) return boundaryInserted;
+
   const deleted = deleteSelectionRange(doc, selection);
   const blockPath = currentTextBlockPath(deleted.doc, deleted.selection.path);
   if (blockPath === undefined) return { doc, selection };
@@ -1524,6 +1527,29 @@ function isLargeBlockLandingText(text: string) {
 
 function isLargeDeletionBoundaryBlock(node: EditorJson | undefined) {
   return node?.type === "table" || node?.type === "horizontalRule";
+}
+
+function insertParagraphAtLargeBlockBoundary(
+  doc: EditorJson,
+  selection: EditorSelection,
+): { doc: EditorJson; selection: EditorSelection } | undefined {
+  if (isSelectionExpanded(selection)) return undefined;
+  if (!isLargeDeletionBoundaryBlock(getNodeAtPath(doc, selection.path))) return undefined;
+
+  const nextDoc = cloneEditorJson(doc);
+  const parentPath = selection.path.slice(0, -1);
+  const blockIndex = selection.path.at(-1) ?? 0;
+  const nextParent = getNodeAtPath(nextDoc, parentPath);
+  const siblings = parentPath.length === 0 ? nextDoc.content : nextParent?.content;
+  if (siblings === undefined) return undefined;
+
+  const insertIndex = blockIndex + (selection.offset > 0 ? 1 : 0);
+  siblings.splice(insertIndex, 0, createTextParagraph(""));
+
+  return {
+    doc: nextDoc,
+    selection: { path: [...parentPath, insertIndex, 0], offset: 0 },
+  };
 }
 
 function moveLargeBlockBoundarySelection(

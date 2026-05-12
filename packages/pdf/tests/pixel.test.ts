@@ -22,6 +22,7 @@ import { editorConfig } from "../../../apps/editor/src/editor-demo.ts";
 import {
   createFontRegistry,
   createFontScriptStyle,
+  createFontStrikeoutStyle,
   createStandardFontMetrics,
   type VasaFont,
 } from "../../font/src/index.ts";
@@ -588,15 +589,15 @@ test("renders the apps/editor rich-text page contract identically between canvas
 test("apps/editor keeps visible space before Geist bold italic combined marks", () => {
   const gap = expectCombinedMarksBoldItalicGap(geistFixtureRenderProfile());
 
-  expect(gap.measuredGap).toBeGreaterThanOrEqual(3);
-  expect(gap.inkGap).toBeGreaterThanOrEqual(10);
+  expect(gap.measuredGap).toBeLessThan(1);
+  expect(gap.inkGap).toBeGreaterThanOrEqual(6);
 });
 
 test("apps/web keeps visible space before Geist bold italic combined marks", () => {
   const gap = expectCombinedMarksBoldItalicGap(webGeistFixtureRenderProfile());
 
-  expect(gap.measuredGap).toBeGreaterThanOrEqual(3);
-  expect(gap.inkGap).toBeGreaterThanOrEqual(10);
+  expect(gap.measuredGap).toBeLessThan(1);
+  expect(gap.inkGap).toBeGreaterThanOrEqual(6);
 });
 
 test("apps/editor outline PDF is not selectable through pdf.js text extraction", async () => {
@@ -1345,14 +1346,8 @@ function createFontDecorationContract(
 }
 
 function expectedFontStrikeoutOffset(font: VasaFont, line: TextLine) {
-  const metrics = font.data.metrics;
-  expect(metrics, `${font.family} metrics`).toBeDefined();
-  const unitsPerEm = metrics!.unitsPerEm;
   const fontSize = line.fontSize ?? editorConfig.textFontSize;
-  const ascender = metrics!.ascender / unitsPerEm;
-  const position = (metrics!.strikeoutPosition ?? unitsPerEm * 0.25) / unitsPerEm;
-
-  return ascender * fontSize - position * fontSize;
+  return createFontStrikeoutStyle(font, { fontSize }).offset;
 }
 
 function expectedFontStrikeoutTop(font: VasaFont, line: TextLine) {

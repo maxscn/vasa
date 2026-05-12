@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { buildCanvasScene, type CanvasNode, type CanvasScene } from "@vasa/canvas";
 import { generateHTML, generateJSON, getSchema } from "@vasa/core";
-import { createStandardFontMetrics, type VasaFont } from "@vasa/font";
+import { createFontStrikeoutStyle, createStandardFontMetrics, type VasaFont } from "@vasa/font";
 import { layoutDocument, type LayoutResult } from "@vasa/layout";
 import { createRenderDocument, type TextOutlineFont } from "@vasa/renderer";
 import { analyzeWebGlScene } from "@vasa/webgl";
@@ -42,6 +42,7 @@ import {
   insertText,
   insertTextWithMarks,
   isMarkActive,
+  isSelectionInsideEditorNodeType,
   isSelectionPointAtCurrentTableEnd,
   moveSelection,
   moveSelectionHorizontally,
@@ -60,6 +61,7 @@ import {
   setLineHeight,
   splitParagraph,
   setColor,
+  preferredSelectableFonts,
   trimTrailingInlineWhitespaceSelection,
   toggleBold,
   toggleCode,
@@ -81,6 +83,7 @@ import {
   defaultEditorExtensions,
   editorCodeFontId,
   editorHeadingTextStyleAttrs,
+  selectedRenderPageIndex,
   type EditorSelection,
   type EditorJson,
   type EditorRenderProfileOptions,
@@ -110,9 +113,14 @@ function testFont(overrides: Partial<VasaFont>): VasaFont {
 const parityOutlineFont = {
   unitsPerEm: 1000,
   ascender: 750,
+  descender: -250,
   source: {
-    charToGlyph() {
+    unitsPerEm: 1000,
+    ascender: 750,
+    descender: -250,
+    charToGlyph(_character: string) {
       return {
+        index: 0,
         advanceWidth: 600,
         getPath(x: number, y: number, fontSize: number) {
           return {
@@ -134,9 +142,14 @@ function outlineFontWithAdvance(advanceWidth: number): TextOutlineFont {
   return {
     unitsPerEm: 1000,
     ascender: 750,
+    descender: -250,
     source: {
-      charToGlyph() {
+      unitsPerEm: 1000,
+      ascender: 750,
+      descender: -250,
+      charToGlyph(_character: string) {
         return {
+          index: 0,
           advanceWidth,
           getPath(x: number, y: number, fontSize: number) {
             return {
@@ -492,6 +505,53 @@ test("uses real bold font faces with modest outline emboldening", () => {
   });
 });
 
+test("uses the resolved font face metrics for strike geometry", () => {
+  const regular = testFont({
+    id: "inter-400",
+    weight: "400",
+    data: {
+      kind: "native",
+      metrics: {
+        ...createStandardFontMetrics({ family: "Inter" }),
+        capHeight: 900,
+        strikeoutPosition: 120,
+        strikeoutSize: 40,
+      },
+    },
+  });
+  const bold = testFont({
+    id: "inter-700",
+    weight: "700",
+    data: {
+      kind: "native",
+      metrics: {
+        ...createStandardFontMetrics({ family: "Inter" }),
+        capHeight: 1200,
+        strikeoutPosition: 520,
+        strikeoutSize: 80,
+      },
+    },
+  });
+  const profile: EditorRenderProfileOptions = {
+    fonts: [regular, bold],
+    defaultFontId: regular.id,
+    fallbackFont: regular,
+    fontSize: 20,
+    lineHeight: 24,
+  };
+  const style = createEditorRenderResolveTextStyle(profile)({
+    fontId: regular.id,
+    fontWeight: "700",
+    textDecorationLine: "line-through",
+  });
+  const expected = createFontStrikeoutStyle(bold, { fontSize: 20 });
+  const regularStrikeout = createFontStrikeoutStyle(regular, { fontSize: 20 });
+
+  expect(style.textDecorationOffset).toBeCloseTo(expected.offset, 5);
+  expect(style.textDecorationThickness).toBe(expected.thickness);
+  expect(style.textDecorationOffset).not.toBeCloseTo(regularStrikeout.offset, 5);
+});
+
 test("faux emboldens only when no bold face is available", () => {
   const regularOutline = { id: "regular-outline" } as unknown as NonNullable<
     VasaFont["outlineFont"]
@@ -785,7 +845,7 @@ test("uses resolved italic faces when wrapping mixed inline text", () => {
   const textBox = layout.pages[0]?.boxes[0]?.children[0];
 
   expect(textBox?.visualLines).toHaveLength(1);
-  expect(textBox?.visualLines?.[0]?.width).toBe(53);
+  expect(textBox?.visualLines?.[0]?.width).toBe(50);
 });
 
 test("converts table documents into row and cell layout containers", () => {
@@ -959,6 +1019,21 @@ test("creates an editable paragraph after a terminal table", () => {
     selection: { path: [1, 0], offset: 0 },
   });
   expect(isSelectionPointAtCurrentTableEnd(doc, selection, selection)).toBe(true);
+});
+
+test("enter at the gap cursor below a table inserts a paragraph below it", () => {
+  const doc = editorTableDoc();
+
+  expect(splitParagraph(doc, { path: [0], offset: 1 })).toEqual({
+    doc: {
+      type: "doc",
+      content: [
+        ...(doc.content ?? []),
+        { type: "paragraph", content: [{ type: "text", text: "" }] },
+      ],
+    },
+    selection: { path: [1, 0], offset: 0 },
+  });
 });
 
 test("uses the next editable block when exiting a table with content below", () => {
@@ -2124,6 +2199,57 @@ test("shift enter inserts a line break inside the current paragraph", () => {
   expect(suppressedInputType).toBe("insertLineBreak");
   expect(session.doc).toEqual(editorDoc("Hello\n Vasa"));
   expect(session.selection).toEqual({ path: [0, 0], offset: 6 });
+});
+
+test("enter inserts a paragraph below a table gap cursor selection", () => {
+  let session = createEditorSession({
+    doc: editorTableDoc(),
+    selection: { path: [0], offset: 1 },
+  });
+  let prevented = false;
+  let suppressedInputType = "";
+  const event = {
+    key: "Enter",
+    preventDefault: () => {
+      prevented = true;
+    },
+  } as Parameters<typeof applyEditorKeymap>[0];
+
+  const handled = applyEditorKeymap(event, {
+    editorDocument: session.doc,
+    renderDocument: { pages: [] },
+    renderLineOptions: { pageHeight: 100 },
+    measureText: fixedWidthMeasureText,
+    updateEditor: (update) => {
+      session = update(session);
+    },
+    updateSelection: () => {},
+    suppressBeforeInput: (inputType) => {
+      suppressedInputType = inputType;
+    },
+    undo: () => {},
+    redo: () => {},
+    toggleBold: () => {},
+    toggleMark: () => {},
+    toggleBlockquote: () => {},
+    setBlockType: () => {},
+    insertLineBreak: () => {},
+    splitParagraph: () => {
+      session = {
+        ...session,
+        ...splitParagraph(session.doc, session.selection),
+      };
+    },
+  } satisfies EditorKeymapOptions);
+
+  expect(handled).toBe(true);
+  expect(prevented).toBe(true);
+  expect(suppressedInputType).toBe("insertParagraph");
+  expect(session.doc.content?.at(-1)).toEqual({
+    type: "paragraph",
+    content: [{ type: "text", text: "" }],
+  });
+  expect(session.selection).toEqual({ path: [1, 0], offset: 0 });
 });
 
 test("splitting a styled paragraph preserves sibling text runs and marks", () => {
@@ -3920,6 +4046,64 @@ test("createBarebonesEditorExtensions can render paragraph nodes to DOM", () => 
   const schema = getSchema(createBarebonesEditorExtensions());
 
   expect(schema.nodes.paragraph.spec.toDOM).toBeTypeOf("function");
+});
+
+test("preferredSelectableFonts keeps one regular font per family and style", () => {
+  const interBold = testFont({ id: "inter-700", family: "Inter", weight: "700" });
+  const interRegular = testFont({ id: "inter-400", family: "Inter", weight: "400" });
+  const interItalic = testFont({
+    id: "inter-italic-400",
+    family: "Inter",
+    style: "italic",
+    weight: "400",
+  });
+
+  expect(
+    preferredSelectableFonts([interBold, interRegular, interItalic]).map((font) => font.id),
+  ).toEqual(["inter-400", "inter-italic-400"]);
+});
+
+test("isSelectionInsideEditorNodeType detects ancestor nodes", () => {
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [{ type: "paragraph", content: [{ type: "text", text: "Cell" }] }],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  expect(isSelectionInsideEditorNodeType(doc, [0, 0, 0, 0, 0], "table")).toBe(true);
+  expect(isSelectionInsideEditorNodeType(doc, [0, 0, 0, 0, 0], "blockquote")).toBe(false);
+});
+
+test("selectedRenderPageIndex resolves the page containing a source path", () => {
+  const document = {
+    pages: [
+      {
+        index: 3,
+        nodes: [{ sourceId: "0", children: [], rect: { x: 0, y: 0, width: 10, height: 10 } }],
+      },
+      {
+        index: 4,
+        nodes: [{ sourceId: "1", children: [], rect: { x: 0, y: 0, width: 10, height: 10 } }],
+      },
+    ],
+  } as unknown as Parameters<typeof selectedRenderPageIndex>[0];
+
+  expect(selectedRenderPageIndex(document, [1, 0])).toBe(4);
+  expect(selectedRenderPageIndex(document, [2])).toBe(3);
 });
 
 function editorDoc(text: string): EditorJson {

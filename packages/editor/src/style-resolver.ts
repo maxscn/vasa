@@ -155,11 +155,12 @@ export function resolveEditorTextStyle(
   attrs: EditorTextStyleAttributes,
 ): TextStyle {
   const context = createTextStylesheetContext(options, attrs);
+  const metricsFont = context.familyFont;
   const textDecoration =
     attrs.textDecorationLine === "line-through"
-      ? createFontStrikeoutStyle(context.font, { fontSize: context.fontSize })
+      ? createFontStrikeoutStyle(metricsFont, { fontSize: context.fontSize })
       : attrs.textDecorationLine === "underline"
-        ? createEditorFontUnderlineStyle(context.font, { fontSize: context.fontSize })
+        ? createEditorFontUnderlineStyle(metricsFont, { fontSize: context.fontSize })
         : undefined;
   const lineHeight =
     attrs.lineHeight === undefined
@@ -179,7 +180,7 @@ export function resolveEditorTextStyle(
       textDecorationOffset: textDecoration?.offset,
       textDecorationThickness: textDecoration?.thickness,
       verticalAlign: attrs.verticalAlign,
-      baselineShift: resolveBaselineShift(options, context.font, attrs),
+      baselineShift: resolveBaselineShift(options, metricsFont, attrs),
     },
   );
 

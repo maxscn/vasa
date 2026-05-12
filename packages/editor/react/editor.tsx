@@ -17,6 +17,15 @@ export {
 export { useEditor };
 export { useEditorFonts };
 export { useEditorPdf };
+export {
+  canvasVisualScale,
+  isSelectionInsideEditorNodeType,
+  pageCanvasY,
+  preferredSelectableFonts,
+  renderPageContainsSourcePath,
+  scrollEditorCanvasToPage,
+  selectedRenderPageIndex,
+} from "./shell-utils.ts";
 export type {
   EditorConfig,
   EditorProps,

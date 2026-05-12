@@ -6,6 +6,7 @@ import type { EditorConfig } from "@vasa/editor";
 import {
   arimoFallbackFont,
   arimoRegularFont,
+  createGoogleFontSource,
   createGoogleFontDescriptors,
   type FontDescriptor,
 } from "@vasa/font";
@@ -20,9 +21,9 @@ const defaultFontFamilies = [
 
 export const webEditorConfig = {
   bundledFont: arimoRegularFont,
-  bundledFontSource: "/__vasa-assets/fonts/google/arimo/Arimo-Regular.ttf",
+  bundledFontSource: createGoogleFontSource("Arimo", "400"),
   fallbackFont: arimoFallbackFont,
-  fallbackFontSource: "/__vasa-assets/fonts/google/arimo/Arimo-Regular.ttf",
+  fallbackFontSource: createGoogleFontSource("Arimo", "400"),
   page: {
     width: 612,
     height: 792,

@@ -1,6 +1,11 @@
 import { parseTextOutlineFont, type TextOutlineFont } from "@vasa/renderer";
+import type { Wawoff2DecompressBinding } from "wawoff2/build/decompress_binding.js";
 
-export type FontSource = Uint8Array | ArrayBuffer | string;
+export type FontSource =
+  | Uint8Array
+  | ArrayBuffer
+  | string
+  | (() => FontSource | Promise<FontSource>);
 
 export type FontDescriptor = {
   id?: string;
@@ -76,6 +81,8 @@ export type FontRegistry = {
 
 export type GoogleFontDescriptorOptions = {
   basePath?: string;
+  display?: string;
+  subset?: string;
 };
 
 type FontFaceConstructor = new (
@@ -179,6 +186,7 @@ export function createFontRegistry(options: CreateFontRegistryOptions = {}): Fon
         ).catch(() => undefined);
       }
 
+      const outlineBytes = await normalizeOutlineFontBytes(bytes).catch(() => undefined);
       const font: VasaFont = {
         id,
         family: descriptor.family,
@@ -187,7 +195,7 @@ export function createFontRegistry(options: CreateFontRegistryOptions = {}): Fon
         style,
         fallbackFamilies,
         cssFamily,
-        ...fontFaceDataProps(bytes, descriptor),
+        ...fontFaceDataProps(outlineBytes, descriptor),
       };
       fonts.set(font.id, font);
       return font;
@@ -383,7 +391,11 @@ export function createFontStrikeoutStyle(
 
   const unitsPerEm = positive(metrics.unitsPerEm) ?? 1;
   const ascender = metrics.ascender / unitsPerEm;
-  const position = (positive(metrics.strikeoutPosition) ?? unitsPerEm * 0.25) / unitsPerEm;
+  const visualHeight = positive(metrics.capHeight) ?? positive(metrics.xHeight);
+  const position =
+    visualHeight === undefined
+      ? (positive(metrics.strikeoutPosition) ?? unitsPerEm * 0.25) / unitsPerEm
+      : visualHeight / unitsPerEm / 2;
   const thickness = Math.max(
     1,
     Math.round(
@@ -439,9 +451,29 @@ export function createGoogleFontDescriptor(
     id: `${fontIdFromFamily(family, 0)}-${weight}`,
     family,
     displayName: family,
-    source: `${options.basePath ?? googleFontAssetBasePath}/${file}`,
+    source:
+      options.basePath === undefined
+        ? createGoogleFontSource(family, weight, options)
+        : `${options.basePath}/${file}`,
     weight,
     fallbackFamilies: ["Arial", "sans-serif"],
+  };
+}
+
+export function createGoogleFontSource(
+  family: string,
+  weight = "400",
+  options: Pick<GoogleFontDescriptorOptions, "display" | "subset"> = {},
+): () => Promise<Uint8Array> {
+  const url = googleFontsCssUrl(family, weight, options);
+  const cacheKey = `${url}\u0000${options.subset ?? "latin"}`;
+  return async () => {
+    const cached = googleFontSourceCache.get(cacheKey);
+    if (cached !== undefined) return copyBytes(await cached);
+
+    const promise = resolveGoogleFontBytes(url, options.subset);
+    googleFontSourceCache.set(cacheKey, promise);
+    return copyBytes(await promise);
   };
 }
 
@@ -534,6 +566,7 @@ function createNativeFont(
 
 async function resolveFontBytes(source: FontSource | undefined): Promise<Uint8Array | undefined> {
   if (source === undefined) return undefined;
+  if (typeof source === "function") return resolveFontBytes(await source());
   if (typeof source === "string") {
     const response = await fetch(source);
     if (!response.ok)
@@ -543,6 +576,35 @@ async function resolveFontBytes(source: FontSource | undefined): Promise<Uint8Ar
 
   if (source instanceof Uint8Array) return copyBytes(source);
   return new Uint8Array(source.slice(0));
+}
+
+async function normalizeOutlineFontBytes(bytes: Uint8Array | undefined) {
+  if (bytes === undefined) return undefined;
+  if (!isWoff2(bytes)) return bytes;
+
+  return copyBytes(await decompressWoff2(bytes));
+}
+
+async function decompressWoff2(bytes: Uint8Array) {
+  const module = await import("wawoff2/build/decompress_binding.js");
+  const binding = module.default;
+  await waitForWoff2Runtime(binding);
+
+  const result = binding.decompress(copyBytes(bytes));
+  if (result === false) throw new Error("ConvertWOFF2ToTTF failed");
+  return result;
+}
+
+function waitForWoff2Runtime(binding: Wawoff2DecompressBinding) {
+  if (binding.calledRun === true) return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    const current = binding.onRuntimeInitialized;
+    binding.onRuntimeInitialized = () => {
+      current?.();
+      resolve();
+    };
+  });
 }
 
 async function loadRuntimeFontFace(
@@ -583,6 +645,52 @@ function copyBytes(bytes: Uint8Array) {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   return copy;
+}
+
+const googleFontSourceCache = new Map<string, Promise<Uint8Array>>();
+
+function googleFontsCssUrl(
+  family: string,
+  weight: string,
+  options: Pick<GoogleFontDescriptorOptions, "display">,
+) {
+  const query = new URLSearchParams({
+    family: `${family.replaceAll(" ", "+")}:wght@${weight}`,
+    display: options.display ?? "swap",
+  });
+  return `https://fonts.googleapis.com/css2?${query.toString().replaceAll("%2B", "+")}`;
+}
+
+async function resolveGoogleFontBytes(cssUrl: string, subset: string | undefined) {
+  const cssResponse = await fetch(cssUrl);
+  if (!cssResponse.ok) {
+    throw new Error(
+      `Unable to load Google Font CSS: ${cssResponse.status} ${cssResponse.statusText}`,
+    );
+  }
+
+  const fontUrl = googleFontUrlFromCss(await cssResponse.text(), subset);
+  const fontResponse = await fetch(fontUrl);
+  if (!fontResponse.ok) {
+    throw new Error(
+      `Unable to load Google Font: ${fontResponse.status} ${fontResponse.statusText}`,
+    );
+  }
+
+  return new Uint8Array(await fontResponse.arrayBuffer());
+}
+
+export function googleFontUrlFromCss(css: string, subset = "latin") {
+  const blocks = [...css.matchAll(/\/\*\s*([^*]+?)\s*\*\/\s*@font-face\s*{([^}]+)}/g)];
+  const preferred = blocks.find((match) => match[1]?.trim() === subset) ?? blocks.at(-1);
+  const source = preferred?.[2] ?? css;
+  const url = /url\((?:'|")?([^'")]+\.woff2)(?:'|")?\)/.exec(source)?.[1];
+  if (url === undefined) throw new Error("Unable to find a WOFF2 font URL in Google Font CSS.");
+  return url;
+}
+
+function isWoff2(bytes: Uint8Array) {
+  return bytes[0] === 0x77 && bytes[1] === 0x4f && bytes[2] === 0x46 && bytes[3] === 0x32;
 }
 
 function quoteFontFamily(family: string) {

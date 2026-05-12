@@ -77,28 +77,32 @@ export type RegisterEditorFontsOptions = {
 };
 
 export async function registerEditorFonts(options: RegisterEditorFontsOptions) {
-  await Promise.allSettled([
-    options.registry.register({
-      ...options.fallbackFont,
-      ...(options.fallbackFontSource === undefined ? {} : { source: options.fallbackFontSource }),
-    }),
-    ...(options.fontFamilies ?? []).map((font) =>
-      options.registry.register(
-        typeof font === "string"
-          ? {
-              id: fontIdFromFamily(font),
-              family: font,
-              displayName: font,
-              fallbackFamilies: ["Arial", "sans-serif"],
-            }
-          : font,
-      ),
-    ),
-    options.registry.register({
-      ...options.bundledFont,
-      ...(options.bundledFontSource === undefined ? {} : { source: options.bundledFontSource }),
-    }),
-  ]);
+  await options.registry.register(fontDescriptorMetadata(options.fallbackFont));
+
+  for (const font of options.fontFamilies ?? []) {
+    await options.registry.register(fontDescriptorMetadata(editorFontDescriptorFromInput(font)));
+  }
+
+  await options.registry.register(fontDescriptorMetadata(options.bundledFont));
 
   return mergeFonts([options.bundledFont, options.fallbackFont], options.registry.list());
+}
+
+export function editorFontDescriptorFromInput(font: string | FontDescriptor): FontDescriptor {
+  return typeof font === "string"
+    ? {
+        id: fontIdFromFamily(font),
+        family: font,
+        displayName: font,
+        fallbackFamilies: ["Arial", "sans-serif"],
+      }
+    : font;
+}
+
+export function fontDescriptorMetadata(font: FontDescriptor): FontDescriptor {
+  return {
+    ...font,
+    source: undefined,
+    runtimeSource: undefined,
+  };
 }

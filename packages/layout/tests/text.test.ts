@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import { createMonospaceTextMeasurer, layoutPage } from "../src/index.ts";
+import { createMonospaceTextMeasurer, layoutPage, type TextMeasurer } from "../src/index.ts";
 
 const measurer = createMonospaceTextMeasurer({ charWidth: 10 });
 
@@ -216,3 +216,78 @@ test("inline text grid keeps subscript on the line while row owns height", () =>
     },
   ]);
 });
+
+test("does not add extra inline style gap when the whitespace glyph is wide enough", () => {
+  const result = layoutPage(
+    {
+      type: "box",
+      children: [
+        {
+          type: "inlineText",
+          id: "label",
+          runs: [
+            { id: "label.0", text: "Label ", style: { font: "400 16px sans-serif" } },
+            { id: "label.1", text: "bold", style: { font: "700 16px sans-serif" } },
+          ],
+          style: { lineHeight: 20 },
+        },
+      ],
+    },
+    { x: 24, y: 32, width: 300, height: 300 },
+    measurer,
+  );
+
+  expect(result.boxes[0]?.lines?.map((line) => [line.text, line.x, line.width])).toEqual([
+    ["Label ", 24, 60],
+    ["bold", 84, 40],
+  ]);
+});
+
+test("tops up inline style gap only when the whitespace glyph is too narrow", () => {
+  const narrowSpaceMeasurer = createCharacterWidthMeasurer((character) =>
+    character === " " ? 1 : 10,
+  );
+  const result = layoutPage(
+    {
+      type: "box",
+      children: [
+        {
+          type: "inlineText",
+          id: "label",
+          runs: [
+            { id: "label.0", text: "A ", style: { font: "400 16px sans-serif" } },
+            { id: "label.1", text: "B", style: { font: "700 16px sans-serif" } },
+          ],
+          style: { lineHeight: 20 },
+        },
+      ],
+    },
+    { x: 24, y: 32, width: 300, height: 300 },
+    narrowSpaceMeasurer,
+  );
+
+  expect(result.boxes[0]?.lines?.map((line) => [line.text, line.x, line.width])).toEqual([
+    ["A ", 24, 11],
+    ["B", 38, 10],
+  ]);
+  expect(result.boxes[0]?.rect.width).toBe(24);
+});
+
+function createCharacterWidthMeasurer(
+  widthForCharacter: (character: string) => number,
+): TextMeasurer {
+  return {
+    measureText(input) {
+      const width = Array.from(input.text).reduce(
+        (total, character) => total + widthForCharacter(character),
+        0,
+      );
+      return {
+        width,
+        height: input.lineHeight,
+        lineCount: 1,
+        lines: [{ text: input.text, width }],
+      };
+    },
+  };
+}

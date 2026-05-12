@@ -229,6 +229,14 @@ export function useEditor({ config }: EditorProps) {
     editorFonts.fonts.find(
       (font) => font.id === (currentTextStyleAttrs.fontId ?? defaultRenderFont.id),
     ) ?? defaultRenderFont;
+  const documentFontIds = useMemo(
+    () => collectEditorDocumentFontIds(editorDocument),
+    [editorDocument],
+  );
+  useEffect(() => {
+    void editorFonts.ensureFontLoaded(selectedRenderFont.id);
+    for (const fontId of documentFontIds) void editorFonts.ensureFontLoaded(fontId);
+  }, [documentFontIds, editorFonts.ensureFontLoaded, selectedRenderFont.id]);
   const selectedFontSize =
     currentTextStyleAttrs.fontSize ??
     (currentTextBlock.type === "heading"
@@ -419,6 +427,7 @@ export function useEditor({ config }: EditorProps) {
 
   function updateSelectedFont(fontId: string) {
     editorFonts.setSelectedFontId(fontId);
+    void editorFonts.ensureFontLoaded(fontId);
     updateEditor((session) =>
       setEditorSessionTextStyle(session, { fontId }, (doc, currentSelection) =>
         setFontFamily(doc, currentSelection, fontId),
@@ -753,6 +762,20 @@ export function useEditor({ config }: EditorProps) {
 }
 
 export type UseEditorReturn = ReturnType<typeof useEditor>;
+
+function collectEditorDocumentFontIds(doc: EditorJson): string[] {
+  const fontIds = new Set<string>();
+  collectEditorNodeFontIds(doc, fontIds);
+  return [...fontIds].sort();
+}
+
+function collectEditorNodeFontIds(node: EditorJson, fontIds: Set<string>) {
+  for (const mark of node.marks ?? []) {
+    const fontId = mark.attrs?.fontId;
+    if (typeof fontId === "string") fontIds.add(fontId);
+  }
+  for (const child of node.content ?? []) collectEditorNodeFontIds(child, fontIds);
+}
 
 function textOnlyCanvasSurface(
   context: CanvasRenderingContext2D,

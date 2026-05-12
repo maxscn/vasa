@@ -1,6 +1,7 @@
 import { expect, test } from "vite-plus/test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { compress } from "wawoff2";
 import {
   createCanvasFontValue,
   createCssFontFamily,
@@ -10,6 +11,7 @@ import {
   createFontStrikeoutStyle,
   createFontUnderlineStyle,
   createStandardFontMetrics,
+  googleFontUrlFromCss,
 } from "../src/index.ts";
 
 const liberationSansBytes = () =>
@@ -76,6 +78,37 @@ test("registers font bytes with outline data and metrics", async () => {
   expect(font.data.bytes.byteLength).toBeGreaterThan(0);
 });
 
+test("registers woff2 font bytes with outline data", async () => {
+  const registry = createFontRegistry();
+  const font = await registry.register({
+    family: "Arimo",
+    source: await compress(arimoBytes()),
+  });
+
+  expect(font.data.kind).toBe("outline");
+  expect(font.outlineFont).toBeDefined();
+  if (font.data.kind !== "outline") throw new Error("Expected outline font data.");
+  expect(font.data.bytes.byteLength).toBeGreaterThan(0);
+  expect(font.data.metrics.unitsPerEm).toBeGreaterThan(0);
+}, 15_000);
+
+test("extracts the preferred woff2 URL from Google Fonts CSS", () => {
+  expect(
+    googleFontUrlFromCss(`
+      /* latin-ext */
+      @font-face {
+        font-family: 'Arimo';
+        src: url(https://fonts.gstatic.com/s/arimo/latin-ext.woff2) format('woff2');
+      }
+      /* latin */
+      @font-face {
+        font-family: 'Arimo';
+        src: url(https://fonts.gstatic.com/s/arimo/latin.woff2) format('woff2');
+      }
+    `),
+  ).toBe("https://fonts.gstatic.com/s/arimo/latin.woff2");
+});
+
 test.each([
   {
     family: "Arimo",
@@ -110,9 +143,12 @@ test.each([
     const underlineTop =
       (metrics.ascender / em) * fontSize -
       ((metrics.underlinePosition ?? -em * 0.1) / em) * fontSize;
+    const strikeoutHeight = metrics.capHeight ?? metrics.xHeight;
     const strikeoutTop =
-      (metrics.ascender / em) * fontSize -
-      ((metrics.strikeoutPosition ?? em * 0.25) / em) * fontSize;
+      strikeoutHeight === undefined
+        ? (metrics.ascender / em) * fontSize -
+          ((metrics.strikeoutPosition ?? em * 0.25) / em) * fontSize
+        : (metrics.ascender / em) * fontSize - (strikeoutHeight / em / 2) * fontSize;
     const expectedSubscriptFontSize = ((metrics.subscriptYSize ?? em * 0.5) / em) * fontSize;
     const expectedSuperscriptFontSize = ((metrics.superscriptYSize ?? em * 0.5) / em) * fontSize;
     const expectedSubscriptBaselineDelta = ((metrics.subscriptYOffset ?? em * 0.2) / em) * fontSize;
