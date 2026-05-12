@@ -731,6 +731,46 @@ test("measures synthetic bold italic with the closest bold outline face", () => 
   expect(measureText("B", "italic 700 10px Inter, Arial, sans-serif")).toBe(20);
 });
 
+test("measures the primary CSS font family before fallback families", () => {
+  const arial = testFont({
+    id: "arial",
+    family: "Arial",
+    displayName: "Arial",
+    cssFamily: "Arial, sans-serif",
+  });
+  const regular = testFont({
+    id: "inter-400",
+    weight: "400",
+    outlineFont: outlineFontWithAdvance(1000),
+  });
+  const bold = testFont({
+    id: "inter-700",
+    weight: "700",
+    outlineFont: outlineFontWithAdvance(2000),
+  });
+  const measureText = createEditorRenderMeasureText(
+    {
+      fonts: [arial, regular, bold],
+      defaultFontId: regular.id,
+      fallbackFont: arial,
+      fontSize: 10,
+      lineHeight: 12,
+    },
+    () => 999,
+  );
+
+  expect(measureText("A", "normal 400 10px Inter, Arial, sans-serif")).toBe(999);
+  expect(
+    createEditorRenderMeasureText({
+      fonts: [arial, regular, bold],
+      defaultFontId: regular.id,
+      fallbackFont: arial,
+      fontSize: 10,
+      lineHeight: 12,
+    })("B", "italic 700 10px Inter, Arial, sans-serif"),
+  ).toBe(20);
+});
+
 test("lets stylesheets extend layout and renderer text styles", () => {
   const outlineFont = outlineFontWithAdvance(1000);
   const font = testFont({ id: "inter-400", outlineFont });

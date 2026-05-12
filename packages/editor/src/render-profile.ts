@@ -208,7 +208,7 @@ export function createEditorRenderMeasureText(
   return (text: string, font?: string) => {
     const fontSize = parseCssFontSize(font) ?? options.fontSize;
     const fontFace = fontForCssFont(options, font);
-    if (fontFace?.outlineFont !== undefined) {
+    if (fontFace?.outlineFont !== undefined && fallbackMeasureText === undefined) {
       return measureOutlineText(fontFace.outlineFont, text, fontSize);
     }
 
@@ -225,18 +225,10 @@ function fontById(options: EditorRenderProfileOptions, fontId: string) {
 }
 
 function fontForCssFont(options: EditorRenderProfileOptions, font: string | undefined) {
-  if (options.fonts.length <= 1) {
-    return (
-      options.fonts.find((candidate) => font?.includes(candidate.family)) ??
-      options.fonts.find((candidate) => font?.includes(candidate.cssFamily)) ??
-      editorRenderDefaultFont(options)
-    );
-  }
-
   const style = parseCssFontStyle(font);
   const weight = parseCssFontWeight(font);
-  const familyMatches = options.fonts.filter(
-    (candidate) => font?.includes(candidate.family) || font?.includes(candidate.cssFamily),
+  const familyMatches = cssFontFamilies(font).flatMap((family) =>
+    options.fonts.filter((candidate) => normalizeCssFontFamily(candidate.family) === family),
   );
 
   return (
@@ -250,6 +242,65 @@ function fontForCssFont(options: EditorRenderProfileOptions, font: string | unde
     familyMatches[0] ??
     editorRenderDefaultFont(options)
   );
+}
+
+function cssFontFamilies(font: string | undefined) {
+  const source = font ?? "";
+  const sizeMatch = /(?:^|\s)(\d+(?:\.\d+)?)px(?:\/|\s|$)/.exec(source);
+  if (sizeMatch === null) return [];
+
+  return splitCssFontFamilyList(source.slice(sizeMatch.index + sizeMatch[0].length))
+    .map(normalizeCssFontFamily)
+    .filter((family) => family.length > 0);
+}
+
+function splitCssFontFamilyList(source: string) {
+  const families: string[] = [];
+  let current = "";
+  let quote: '"' | "'" | undefined;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === undefined) continue;
+
+    if (quote !== undefined) {
+      current += character;
+      if (character === "\\" && source[index + 1] !== undefined) {
+        current += source[index + 1];
+        index += 1;
+      } else if (character === quote) {
+        quote = undefined;
+      }
+      continue;
+    }
+
+    if (character === '"' || character === "'") {
+      quote = character;
+      current += character;
+      continue;
+    }
+
+    if (character === ",") {
+      families.push(current);
+      current = "";
+      continue;
+    }
+
+    current += character;
+  }
+
+  families.push(current);
+  return families;
+}
+
+function normalizeCssFontFamily(family: string) {
+  const trimmed = family.trim();
+  const unquoted =
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+      ? trimmed.slice(1, -1)
+      : trimmed;
+  return unquoted.replaceAll(/\\(["'\\])/g, "$1").toLowerCase();
 }
 
 function measureOutlineText(
