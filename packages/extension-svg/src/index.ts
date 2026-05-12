@@ -1,5 +1,11 @@
 import type { CanvasRendererExtension } from "@vasa/canvas";
-import type { MaybeArray, VasaExtension, VasaExtensionRenderers } from "@vasa/core";
+import {
+  mergeExtensionRenderers,
+  type ExtensionRendererPlacement,
+  type MaybeArray,
+  type VasaExtension,
+  type VasaExtensionRenderers,
+} from "@vasa/core";
 import type { LayoutExtension, LayoutNodeBase } from "@vasa/layout";
 import type { PdfRendererExtension } from "@vasa/pdf";
 import type { RendererExtension } from "@vasa/renderer";
@@ -31,7 +37,7 @@ export type SvgProps = Omit<SvgNode, "type"> & {
 export type SvgExtensionOptions = {
   renderer?: MaybeArray<RendererExtension>;
   renderers?: VasaExtensionRenderers<SvgExtensionRenderers>;
-  rendererPlacement?: "before" | "after";
+  rendererPlacement?: ExtensionRendererPlacement;
 };
 
 export type SvgImportOptions = {
@@ -110,19 +116,23 @@ export function createSvgExtension(
   return {
     name: "svg",
     layout: svgLayoutExtension,
-    renderer: mergeRenderers(svgRenderExtension, options.renderer, options.rendererPlacement),
+    renderer: mergeExtensionRenderers(
+      svgRenderExtension,
+      options.renderer,
+      options.rendererPlacement,
+    ),
     renderers: {
-      canvas: mergeRenderers(
+      canvas: mergeExtensionRenderers(
         defaultSvgRenderers.canvas,
         options.renderers?.canvas,
         options.rendererPlacement,
       ),
-      webgl: mergeRenderers(
+      webgl: mergeExtensionRenderers(
         defaultSvgRenderers.webgl,
         options.renderers?.webgl,
         options.rendererPlacement,
       ),
-      pdf: mergeRenderers(
+      pdf: mergeExtensionRenderers(
         defaultSvgRenderers.pdf,
         options.renderers?.pdf,
         options.rendererPlacement,
@@ -172,17 +182,6 @@ const defaultSvgRenderers = {
   webgl: svgCanvasRenderer,
   pdf: svgPdfRenderer,
 } satisfies SvgExtensionRenderers;
-
-function mergeRenderers<T>(
-  defaultRenderer: T,
-  renderer: MaybeArray<T> | undefined,
-  placement: SvgExtensionOptions["rendererPlacement"] = "after",
-): MaybeArray<T> {
-  if (renderer === undefined) return defaultRenderer;
-
-  const renderers = Array.isArray(renderer) ? renderer : [renderer];
-  return placement === "before" ? [...renderers, defaultRenderer] : [defaultRenderer, ...renderers];
-}
 
 export const SvgExtension = createSvgExtension();
 

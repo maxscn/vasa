@@ -6,6 +6,7 @@ import {
   collectLayoutExtensions,
   collectRendererExtensions,
   createVasaExtension,
+  mergeExtensionRenderers,
   type VasaExtension,
 } from "../src/index.ts";
 
@@ -106,4 +107,20 @@ test("collects named renderer adapters from extension registries", () => {
     extraCanvasRenderer,
   ]);
   expect(collectExtensionRenderers(extensions, "pdf")).toEqual([pdfRenderer]);
+});
+
+test("merges extension renderers around the default renderer", () => {
+  const defaultRenderer = () => "default";
+  const beforeRenderer = () => "before";
+  const afterRenderer = () => "after";
+
+  expect(mergeExtensionRenderers(defaultRenderer, undefined)).toBe(defaultRenderer);
+  expect(mergeExtensionRenderers(defaultRenderer, afterRenderer)).toEqual([
+    defaultRenderer,
+    afterRenderer,
+  ]);
+  expect(mergeExtensionRenderers(defaultRenderer, [beforeRenderer], "before")).toEqual([
+    beforeRenderer,
+    defaultRenderer,
+  ]);
 });

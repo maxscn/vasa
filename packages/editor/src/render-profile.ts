@@ -208,8 +208,13 @@ export function createEditorRenderMeasureText(
   return (text: string, font?: string) => {
     const fontSize = parseCssFontSize(font) ?? options.fontSize;
     const fontFace = fontForCssFont(options, font);
-    if (fontFace?.outlineFont !== undefined && fallbackMeasureText === undefined) {
-      return measureOutlineText(fontFace.outlineFont, text, fontSize);
+    if (fontFace?.outlineFont !== undefined) {
+      return measureOutlineText(
+        fontFace.outlineFont,
+        text,
+        fontSize,
+        isItalicFontStyle(parseCssFontStyle(font)),
+      );
     }
 
     return fallbackMeasureText?.(text, font) ?? text.length * fontSize * 0.5;
@@ -307,11 +312,53 @@ function measureOutlineText(
   font: NonNullable<VasaFont["outlineFont"]>,
   text: string,
   fontSize: number,
+  includeRightOverhang = false,
 ) {
-  return Array.from(text).reduce((width, character) => {
+  let inkRight = 0;
+  const advance = Array.from(text).reduce((width, character) => {
     const glyph = font.source.charToGlyph(character);
+    if (includeRightOverhang) {
+      const path = glyph.getPath(width, 0, fontSize, undefined, font.source);
+      const bounds = openTypePathXBounds(path.commands);
+      if (bounds !== undefined) inkRight = Math.max(inkRight, bounds.maxX);
+    }
     return width + (glyph.advanceWidth / font.unitsPerEm) * fontSize;
   }, 0);
+  return includeRightOverhang ? Math.max(advance, inkRight) : advance;
+}
+
+type OutlineFont = NonNullable<VasaFont["outlineFont"]>;
+type OutlinePathCommand = ReturnType<
+  ReturnType<OutlineFont["source"]["charToGlyph"]>["getPath"]
+>["commands"][number];
+
+function openTypePathXBounds(commands: OutlinePathCommand[]) {
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+
+  for (const command of commands) {
+    for (const x of openTypeCommandXValues(command)) {
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+    }
+  }
+
+  return Number.isFinite(minX) && Number.isFinite(maxX) ? { minX, maxX } : undefined;
+}
+
+function openTypeCommandXValues(command: OutlinePathCommand) {
+  switch (command.type) {
+    case "M":
+    case "L":
+      return [command.x];
+    case "C":
+      return [command.x1, command.x2, command.x];
+    case "Q":
+      return [command.x1, command.x];
+    case "Z":
+      return [];
+  }
+  return [];
 }
 
 function parseCssFontSize(font: string | undefined) {
@@ -327,6 +374,10 @@ function parseCssFontStyle(font: string | undefined) {
   if (/(^|\s)oblique(\s|$)/.test(prefix)) return "oblique";
   if (/(^|\s)normal(\s|$)/.test(prefix)) return "normal";
   return undefined;
+}
+
+function isItalicFontStyle(style: string | undefined) {
+  return style === "italic" || style === "oblique";
 }
 
 function parseCssFontWeight(font: string | undefined) {

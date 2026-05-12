@@ -10,17 +10,25 @@ type RenderPage = RenderDocument["pages"][number];
 
 export function preferredSelectableFonts(fonts: UseEditorReturn["fonts"]) {
   return fonts.reduce<UseEditorReturn["fonts"]>((selectable, font) => {
-    const index = selectable.findIndex(
-      (candidate) => candidate.family === font.family && candidate.style === font.style,
-    );
+    const index = selectable.findIndex((candidate) => candidate.family === font.family);
     if (index === -1) return [...selectable, font];
-    if (isRegularFontWeight(font.weight) && !isRegularFontWeight(selectable[index]?.weight)) {
+    if (isPreferredSelectableFont(font, selectable[index])) {
       return selectable.map((candidate, candidateIndex) =>
         candidateIndex === index ? font : candidate,
       );
     }
     return selectable;
   }, []);
+}
+
+function isPreferredSelectableFont(
+  font: UseEditorReturn["fonts"][number],
+  selected: UseEditorReturn["fonts"][number] | undefined,
+) {
+  if (selected === undefined) return true;
+  if (font.style === "normal" && selected.style !== "normal") return true;
+  if (font.style !== selected.style) return false;
+  return isRegularFontWeight(font.weight) && !isRegularFontWeight(selected.weight);
 }
 
 export function isSelectionInsideEditorNodeType(

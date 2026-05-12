@@ -2,12 +2,8 @@ import { HorizontalRule } from "@vasa/extension-horizontal-rule";
 import { createSvgNode, SvgExtension } from "@vasa/extension-svg";
 import { TableExtension } from "@vasa/extension-table";
 import type { EditorConfig } from "@vasa/editor";
-import {
-  arimoFallbackFont,
-  arimoRegularFont,
-  createGoogleFontDescriptors,
-  createGoogleFontSource,
-} from "@vasa/font";
+import { arimoFallbackFont, arimoRegularFont } from "@vasa/font";
+import { localArimoRegularFontSource, localGoogleFontDescriptors } from "./editor-font-assets";
 
 export const page = {
   width: 612,
@@ -51,9 +47,9 @@ export const textCharWidth = 8;
 export const textFontSize = 16;
 export const textLineHeight = 16;
 export const fontSizeOptions = [12, 14, 16, 18, 22, 28, 36];
-export const bundledEditorFontSource = createGoogleFontSource("Arimo", "400");
+export const bundledEditorFontSource = localArimoRegularFontSource;
 export const fallbackEditorFontSource = bundledEditorFontSource;
-export const googleFontFamilies = createGoogleFontDescriptors();
+export const googleFontFamilies = localGoogleFontDescriptors;
 
 export const editorConfig = {
   bundledFont: arimoRegularFont,

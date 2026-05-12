@@ -1,4 +1,9 @@
-import { Mark, type MaybeArray, type VasaExtension, type VasaExtensionRenderers } from "@vasa/core";
+import {
+  Mark,
+  mergeExtensionRenderers,
+  type VasaExtension,
+  type VasaExtensionRenderers,
+} from "@vasa/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -23,7 +28,10 @@ export function createBoldExtension(
     name: "bold",
     tiptap: createBoldMark(),
     renderers: {
-      textStyle: appendRenderer(defaultBoldRenderers.textStyle, options.renderers?.textStyle),
+      textStyle: mergeExtensionRenderers(
+        defaultBoldRenderers.textStyle,
+        options.renderers?.textStyle,
+      ),
     },
   };
 }
@@ -93,9 +101,4 @@ function htmlElementStyle(node: unknown): { fontWeight?: string } | undefined {
   return typeof style === "object" && style !== null
     ? (style as { fontWeight?: string })
     : undefined;
-}
-
-function appendRenderer<T>(defaultRenderer: T, renderer: MaybeArray<T> | undefined): MaybeArray<T> {
-  if (renderer === undefined) return defaultRenderer;
-  return [defaultRenderer, ...(Array.isArray(renderer) ? renderer : [renderer])];
 }

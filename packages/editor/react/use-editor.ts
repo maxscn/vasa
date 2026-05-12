@@ -153,6 +153,7 @@ export function useEditor({ config }: EditorProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const webGlTextCanvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
   const editorSessionRef = useRef(editorSession);
+  const fontChangeRequestRef = useRef(0);
   const marginDragRef = useRef<PageMarginGuide | undefined>(undefined);
   const editorFontFamilies = useMemo(
     () => [editorCodeFontDescriptor, ...(config.fontFamilies ?? [])],
@@ -426,13 +427,33 @@ export function useEditor({ config }: EditorProps) {
   ]);
 
   function updateSelectedFont(fontId: string) {
+    const requestId = fontChangeRequestRef.current + 1;
+    fontChangeRequestRef.current = requestId;
+    const requestedSelection = editorSessionRef.current.selection;
+    const requestedStoredMarks = editorSessionRef.current.storedMarks;
     editorFonts.setSelectedFontId(fontId);
-    void editorFonts.ensureFontLoaded(fontId);
-    updateEditor((session) =>
-      setEditorSessionTextStyle(session, { fontId }, (doc, currentSelection) =>
-        setFontFamily(doc, currentSelection, fontId),
-      ),
-    );
+    void editorFonts.ensureFontLoaded(fontId).then(() => {
+      if (fontChangeRequestRef.current !== requestId) return;
+
+      updateEditor((session) => {
+        const sessionAtRequest = {
+          ...session,
+          selection: requestedSelection,
+          storedMarks: requestedStoredMarks,
+        };
+        const styledSession = setEditorSessionTextStyle(
+          sessionAtRequest,
+          { fontId },
+          (doc, currentSelection) => setFontFamily(doc, currentSelection, fontId),
+        );
+        if (!isSelectionExpanded(requestedSelection)) return styledSession;
+        return {
+          ...styledSession,
+          selection: session.selection,
+          storedMarks: session.storedMarks,
+        };
+      });
+    });
     focusKeyboardBridge();
   }
 

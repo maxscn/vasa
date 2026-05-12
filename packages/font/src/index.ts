@@ -83,6 +83,7 @@ export type GoogleFontDescriptorOptions = {
   basePath?: string;
   display?: string;
   subset?: string;
+  style?: string;
 };
 
 type FontFaceConstructor = new (
@@ -447,8 +448,9 @@ export function createGoogleFontDescriptor(
   weight = "400",
   options: GoogleFontDescriptorOptions = {},
 ): FontDescriptor {
+  const style = options.style ?? "normal";
   return {
-    id: `${fontIdFromFamily(family, 0)}-${weight}`,
+    id: `${fontIdFromFamily(family, 0)}-${weight}${style === "normal" ? "" : `-${style}`}`,
     family,
     displayName: family,
     source:
@@ -456,6 +458,7 @@ export function createGoogleFontDescriptor(
         ? createGoogleFontSource(family, weight, options)
         : `${options.basePath}/${file}`,
     weight,
+    style,
     fallbackFamilies: ["Arial", "sans-serif"],
   };
 }
@@ -463,7 +466,7 @@ export function createGoogleFontDescriptor(
 export function createGoogleFontSource(
   family: string,
   weight = "400",
-  options: Pick<GoogleFontDescriptorOptions, "display" | "subset"> = {},
+  options: Pick<GoogleFontDescriptorOptions, "display" | "style" | "subset"> = {},
 ): () => Promise<Uint8Array> {
   const url = googleFontsCssUrl(family, weight, options);
   const cacheKey = `${url}\u0000${options.subset ?? "latin"}`;
@@ -481,10 +484,34 @@ export function createGoogleFontDescriptors(options: GoogleFontDescriptorOptions
   return [
     createGoogleFontDescriptor("Arimo", "arimo/Arimo-Regular.ttf", "400", options),
     createGoogleFontDescriptor("Arimo", "arimo/Arimo-700.ttf", "700", options),
+    createGoogleFontDescriptor("Arimo", "arimo/Arimo-400-italic.ttf", "400", {
+      ...options,
+      style: "italic",
+    }),
+    createGoogleFontDescriptor("Arimo", "arimo/Arimo-700-italic.ttf", "700", {
+      ...options,
+      style: "italic",
+    }),
     createGoogleFontDescriptor("Geist", "geist/Geist-Regular.ttf", "400", options),
     createGoogleFontDescriptor("Geist", "geist/Geist-700.ttf", "700", options),
+    createGoogleFontDescriptor("Geist", "geist/Geist-400-italic.ttf", "400", {
+      ...options,
+      style: "italic",
+    }),
+    createGoogleFontDescriptor("Geist", "geist/Geist-700-italic.ttf", "700", {
+      ...options,
+      style: "italic",
+    }),
     createGoogleFontDescriptor("Inter", "inter/Inter-Regular.ttf", "400", options),
     createGoogleFontDescriptor("Inter", "inter/Inter-700.ttf", "700", options),
+    createGoogleFontDescriptor("Inter", "inter/Inter-400-italic.ttf", "400", {
+      ...options,
+      style: "italic",
+    }),
+    createGoogleFontDescriptor("Inter", "inter/Inter-700-italic.ttf", "700", {
+      ...options,
+      style: "italic",
+    }),
     createGoogleFontDescriptor("Lora", "lora/Lora-Regular.ttf", "400", options),
     createGoogleFontDescriptor("Lora", "lora/Lora-700.ttf", "700", options),
     createGoogleFontDescriptor(
@@ -652,10 +679,14 @@ const googleFontSourceCache = new Map<string, Promise<Uint8Array>>();
 function googleFontsCssUrl(
   family: string,
   weight: string,
-  options: Pick<GoogleFontDescriptorOptions, "display">,
+  options: Pick<GoogleFontDescriptorOptions, "display" | "style">,
 ) {
+  const style = options.style ?? "normal";
   const query = new URLSearchParams({
-    family: `${family.replaceAll(" ", "+")}:wght@${weight}`,
+    family:
+      style === "italic"
+        ? `${family.replaceAll(" ", "+")}:ital,wght@1,${weight}`
+        : `${family.replaceAll(" ", "+")}:wght@${weight}`,
     display: options.display ?? "swap",
   });
   return `https://fonts.googleapis.com/css2?${query.toString().replaceAll("%2B", "+")}`;

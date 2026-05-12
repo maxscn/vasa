@@ -1,10 +1,13 @@
 import { expect, test } from "vite-plus/test";
 import type { LayoutBox, LayoutResult } from "@vasa/layout";
+import { readFileSync } from "node:fs";
 import {
   createTextLineOutline,
   createRenderDocument,
   createRenderRegistry,
   createRenderer,
+  parseTextOutlineFont,
+  textOutlinePathBounds,
   type RenderNode,
   type Renderer,
   type TextOutlineFont,
@@ -133,6 +136,24 @@ test("dispatches layout boxes through registered render components", () => {
       },
     ],
   });
+});
+
+test("applies variable font coordinates to outline glyph paths", () => {
+  const bytes = readFileSync(
+    new URL("../../pdf/tests/fixtures/fonts/google/inter/Inter-Regular.ttf", import.meta.url),
+  );
+  const regular = parseTextOutlineFont(bytes, { variations: { wght: 400 } });
+  const bold = parseTextOutlineFont(bytes, { variations: { wght: 700 } });
+  const regularBounds = textOutlinePathBounds(
+    createTextLineOutline({ text: "bold", x: 0, y: 0 }, { font: regular, fontSize: 32 }),
+  );
+  const boldBounds = textOutlinePathBounds(
+    createTextLineOutline({ text: "bold", x: 0, y: 0 }, { font: bold, fontSize: 32 }),
+  );
+
+  expect(regularBounds).toBeDefined();
+  expect(boldBounds).toBeDefined();
+  expect(boldBounds!.width).toBeGreaterThan(regularBounds!.width);
 });
 
 test("falls through registered components before using default render components", () => {
@@ -268,9 +289,14 @@ function outlineFont(
   return {
     unitsPerEm: 1000,
     ascender: 750,
+    descender: -250,
     source: {
-      charToGlyph() {
+      unitsPerEm: 1000,
+      ascender: 750,
+      descender: -250,
+      charToGlyph(_character: string) {
         return {
+          index: 0,
           advanceWidth: 500,
           getPath(x: number, y: number, fontSize: number) {
             if (glyph.getPath !== undefined) return glyph.getPath(x, y, fontSize);
@@ -278,8 +304,8 @@ function outlineFont(
               commands: [{ type: "M", x, y }, { type: "L", x: x + fontSize / 2, y }, { type: "Z" }],
             };
           },
-        };
+        } as ReturnType<TextOutlineFont["source"]["charToGlyph"]>;
       },
-    } as TextOutlineFont["source"],
+    },
   };
 }

@@ -1,4 +1,9 @@
-import { Mark, type MaybeArray, type VasaExtension, type VasaExtensionRenderers } from "@vasa/core";
+import {
+  Mark,
+  mergeExtensionRenderers,
+  type VasaExtension,
+  type VasaExtensionRenderers,
+} from "@vasa/core";
 
 export type TextStyleAttributes = {
   fontId?: string;
@@ -64,7 +69,10 @@ export function createTextStyleExtension(
     name: "textStyle",
     tiptap: createTextStyleMark(),
     renderers: {
-      textStyle: appendRenderer(defaultTextStyleRenderers.textStyle, options.renderers?.textStyle),
+      textStyle: mergeExtensionRenderers(
+        defaultTextStyleRenderers.textStyle,
+        options.renderers?.textStyle,
+      ),
     },
   };
 }
@@ -265,9 +273,4 @@ function textDecorationLine(element: HtmlElementLike) {
 function verticalAlign(value: string) {
   if (value === "sub" || value === "super") return value;
   return null;
-}
-
-function appendRenderer<T>(defaultRenderer: T, renderer: MaybeArray<T> | undefined): MaybeArray<T> {
-  if (renderer === undefined) return defaultRenderer;
-  return [defaultRenderer, ...(Array.isArray(renderer) ? renderer : [renderer])];
 }

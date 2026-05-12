@@ -820,7 +820,7 @@ function appendTextBackgroundCommands(commands: CanvasCommand[], node: CanvasTex
   if (node.backgroundColor !== undefined) {
     commands.push({
       type: "fillRect",
-      rect: snappedTextRect(node, node.outline),
+      rect: snappedTextRect(node),
       fill: node.backgroundColor,
     });
   }
@@ -842,7 +842,7 @@ function textDecorationRect(
   fontSize: number,
   outline: TextOutlinePath | undefined,
 ): Rect {
-  const horizontal = snappedTextHorizontalRect(node, outline);
+  const horizontal = snappedTextHorizontalRect(node);
   const thickness = node.textDecorationThickness ?? Math.max(1, Math.round(fontSize * 0.06));
   const bounds = outline === undefined ? undefined : textOutlinePathBounds(outline);
   const fallbackOffset =
@@ -864,8 +864,8 @@ function textDecorationRect(
   };
 }
 
-function snappedTextRect(node: CanvasTextLineNode, outline: TextOutlinePath | undefined): Rect {
-  const horizontal = snappedTextHorizontalRect(node, outline);
+function snappedTextRect(node: CanvasTextLineNode): Rect {
+  const horizontal = snappedTextHorizontalRect(node);
   return {
     x: horizontal.x,
     y: Math.round(node.y),
@@ -874,12 +874,8 @@ function snappedTextRect(node: CanvasTextLineNode, outline: TextOutlinePath | un
   };
 }
 
-function snappedTextHorizontalRect(node: CanvasTextLineNode, outline: TextOutlinePath | undefined) {
-  const bounds = outline === undefined ? undefined : textOutlinePathBounds(outline);
-  if (bounds === undefined) return { x: Math.round(node.x), width: Math.round(node.width) };
-
-  const x = Math.floor(bounds.x);
-  return { x, width: Math.max(1, Math.ceil(bounds.x + bounds.width) - x) };
+function snappedTextHorizontalRect(node: CanvasTextLineNode) {
+  return { x: Math.round(node.x), width: Math.round(node.width) };
 }
 
 function fontSizeFromCanvasTextNode(node: CanvasTextLineNode) {

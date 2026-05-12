@@ -5,6 +5,7 @@ import type { RendererExtension } from "@vasa/renderer";
 export * from "@tiptap/core";
 
 export type MaybeArray<T> = T | T[];
+export type ExtensionRendererPlacement = "before" | "after";
 
 export type VasaExtensionRenderers<
   TRenderers extends Record<string, unknown> = Record<string, unknown>,
@@ -49,4 +50,15 @@ export function collectExtensionRenderers<
     if (renderer === undefined) return [];
     return Array.isArray(renderer) ? renderer : [renderer];
   });
+}
+
+export function mergeExtensionRenderers<T>(
+  defaultRenderer: T,
+  renderer: MaybeArray<T> | undefined,
+  placement: ExtensionRendererPlacement = "after",
+): MaybeArray<T> {
+  if (renderer === undefined) return defaultRenderer;
+
+  const renderers = Array.isArray(renderer) ? renderer : [renderer];
+  return placement === "before" ? [...renderers, defaultRenderer] : [defaultRenderer, ...renderers];
 }

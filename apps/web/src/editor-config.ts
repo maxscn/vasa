@@ -3,27 +3,25 @@ import { LineHeight } from "@vasa/extension-line-height";
 import { SvgExtension } from "@vasa/extension-svg";
 import { TableExtension } from "@vasa/extension-table";
 import type { EditorConfig } from "@vasa/editor";
+import { arimoFallbackFont, arimoRegularFont, type FontDescriptor } from "@vasa/font";
 import {
-  arimoFallbackFont,
-  arimoRegularFont,
-  createGoogleFontSource,
-  createGoogleFontDescriptors,
-  type FontDescriptor,
-} from "@vasa/font";
+  localArimoRegularFontSource,
+  localGoogleFontDescriptors,
+} from "../../editor/src/editor-font-assets";
 
 const defaultFontFamilies = [
   systemFont("Arial", ["Helvetica", "sans-serif"]),
   systemFont("Times New Roman", ["Times", "serif"]),
   systemFont("Georgia", ["serif"]),
   systemFont("Verdana", ["Geneva", "sans-serif"]),
-  ...createGoogleFontDescriptors(),
+  ...localGoogleFontDescriptors,
 ] satisfies FontDescriptor[];
 
 export const webEditorConfig = {
   bundledFont: arimoRegularFont,
-  bundledFontSource: createGoogleFontSource("Arimo", "400"),
+  bundledFontSource: localArimoRegularFontSource,
   fallbackFont: arimoFallbackFont,
-  fallbackFontSource: createGoogleFontSource("Arimo", "400"),
+  fallbackFontSource: localArimoRegularFontSource,
   page: {
     width: 612,
     height: 792,

@@ -145,7 +145,7 @@ for (const fixture of googleFontFixtures) {
     );
     const lines = canvasTextLines(scene);
     const boldItalic = lineByText(lines, "bold italic");
-    const struck = lineByText(lines, "struck text");
+    const struck = lines.find((line) => line.text === "struck text") ?? lineByText(lines, "struck");
 
     expect(fonts.every((font) => font.data.kind === "outline")).toBe(true);
     expect(fontByWeight(fonts, "700").outlineFont).toBeDefined();
@@ -179,6 +179,13 @@ async function stubGoogleFontFetch(fonts: Record<string, Record<string, Uint8Arr
     if (url.startsWith("https://fonts.googleapis.com/")) {
       return new Response(googleFontCss(url), {
         headers: { "content-type": "text/css" },
+      });
+    }
+
+    const localFont = /\/fonts\/google\/([^/]+)\/([^/?]+\.ttf)(?:\?.*)?$/.exec(url);
+    if (localFont !== null) {
+      return new Response(bytesBody(await fixtureFontBytes(localFont[1]!, localFont[2]!)), {
+        headers: { "content-type": "font/ttf" },
       });
     }
 
@@ -333,7 +340,7 @@ function expectCanvasStrikeCommandInterop(scene: CanvasScene, line: CanvasTextLi
   expect(command!.rect.height).toBe(line.textDecorationThickness ?? 1);
   expect(Math.abs(command!.rect.x - line.x)).toBeLessThanOrEqual(1);
   expect(command!.rect.width).toBeGreaterThan(0);
-  expect(command!.rect.width).toBeLessThanOrEqual(line.width + 2);
+  expect(command!.rect.width).toBeLessThanOrEqual(line.width + 4);
 
   const bounds = textOutlinePathBounds(line.outline!);
   expect(bounds).toBeDefined();

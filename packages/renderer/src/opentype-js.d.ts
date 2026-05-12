@@ -13,14 +13,25 @@ declare module "opentype.js" {
   export type OpenTypeGlyph = {
     index: number;
     advanceWidth: number;
-    getPath(x: number, y: number, fontSize: number): OpenTypePath;
+    getPath(
+      x: number,
+      y: number,
+      fontSize: number,
+      options?: { variation?: Record<string, number> },
+      font?: OpenTypeFont,
+    ): OpenTypePath;
   };
 
   export type OpenTypeFont = {
     unitsPerEm: number;
     ascender: number;
     descender: number;
+    defaultRenderOptions?: { variation?: Record<string, number> };
     charToGlyph(character: string): OpenTypeGlyph;
+    variation?: {
+      get(): Record<string, number>;
+      set(coords: Record<string, number>): void;
+    };
   };
 
   export function parse(buffer: ArrayBuffer): OpenTypeFont;

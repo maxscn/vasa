@@ -461,6 +461,51 @@ test("keeps strikethrough at its font metric offset with outlined text", () => {
   expect(decoration?.rect.y).toBe(Math.round(line!.y + 6));
 });
 
+test("uses layout bounds for outlined text backgrounds and decorations", () => {
+  const layout = layoutDocument(
+    {
+      type: "box",
+      children: [
+        {
+          type: "inlineText",
+          runs: [
+            {
+              id: "highlight",
+              text: "wide text",
+              style: {
+                backgroundColor: "#fef08a",
+                lineHeight: 20,
+                textDecorationLine: "underline",
+              },
+            },
+          ],
+        },
+      ],
+    },
+    { page: { width: 140, height: 60, margin: 10 }, measurer },
+  );
+  const line = layout.pages[0]?.boxes[0]?.lines?.[0];
+  const commands = createCanvasCommands(
+    buildCanvasScene(createRenderDocument(layout), {
+      text: () => ({ fill: "#111111", fontSize: 10, outlineFont: outlineFont() }),
+    }),
+  );
+  const background = commands.find(
+    (command): command is Extract<CanvasCommand, { type: "fillRect" }> =>
+      command.type === "fillRect" && command.fill === "#fef08a",
+  );
+  const decoration = commands.find(
+    (command): command is Extract<CanvasCommand, { type: "fillRect" }> =>
+      command.type === "fillRect" && command.fill === "#111111",
+  );
+
+  expect(line).toBeDefined();
+  expect(background?.rect.x).toBe(Math.round(line!.x));
+  expect(background?.rect.width).toBe(Math.round(line!.width));
+  expect(decoration?.rect.x).toBe(Math.round(line!.x));
+  expect(decoration?.rect.width).toBe(Math.round(line!.width));
+});
+
 test("reconciles retained, updated, mounted, and unmounted scene nodes", () => {
   const previous = buildCanvasScene(layoutDocument(document(), page()), { pageGap: 12 });
   const nextDocument: BoxNode = {
@@ -579,9 +624,14 @@ function outlineFont(): TextOutlineFont {
   return {
     unitsPerEm: 1000,
     ascender: 750,
+    descender: -250,
     source: {
-      charToGlyph() {
+      unitsPerEm: 1000,
+      ascender: 750,
+      descender: -250,
+      charToGlyph(_character: string) {
         return {
+          index: 0,
           advanceWidth: 500,
           getPath(x: number, y: number, fontSize: number) {
             return {

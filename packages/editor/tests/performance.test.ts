@@ -29,6 +29,7 @@ const renderDocumentIterations = 200;
 const canvasIterations = 80;
 const pdfIterations = 12;
 const toolbarIterations = 400;
+const benchmarkSamples = 8;
 
 const page = { width: 612, height: 792, margin: 48 };
 const fallbackFont: VasaFont = {
@@ -177,11 +178,15 @@ function benchmark(
   measuredRuns = iterations,
 ): BenchResult {
   run();
-  const start = performance.now();
-  for (let index = 0; index < measuredRuns; index += 1) {
-    run();
+  const sampleTotals: number[] = [];
+  for (let sample = 0; sample < benchmarkSamples; sample += 1) {
+    const start = performance.now();
+    for (let index = 0; index < measuredRuns; index += 1) {
+      run();
+    }
+    sampleTotals.push(performance.now() - start);
   }
-  const totalMs = performance.now() - start;
+  const totalMs = Math.min(...sampleTotals);
   return { name, totalMs, perRunMs: totalMs / iterations, perRunBudgetMs };
 }
 

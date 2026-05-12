@@ -243,7 +243,7 @@ test("does not add extra inline style gap when the whitespace glyph is wide enou
   ]);
 });
 
-test("tops up inline style gap only when the whitespace glyph is too narrow", () => {
+test("keeps inline style boundaries at the measured whitespace advance", () => {
   const narrowSpaceMeasurer = createCharacterWidthMeasurer((character) =>
     character === " " ? 1 : 10,
   );
@@ -268,9 +268,9 @@ test("tops up inline style gap only when the whitespace glyph is too narrow", ()
 
   expect(result.boxes[0]?.lines?.map((line) => [line.text, line.x, line.width])).toEqual([
     ["A ", 24, 11],
-    ["B", 38, 10],
+    ["B", 35, 10],
   ]);
-  expect(result.boxes[0]?.rect.width).toBe(24);
+  expect(result.boxes[0]?.rect.width).toBe(21);
 });
 
 function createCharacterWidthMeasurer(

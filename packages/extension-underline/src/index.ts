@@ -1,4 +1,9 @@
-import { Mark, type MaybeArray, type VasaExtension, type VasaExtensionRenderers } from "@vasa/core";
+import {
+  Mark,
+  mergeExtensionRenderers,
+  type VasaExtension,
+  type VasaExtensionRenderers,
+} from "@vasa/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -23,7 +28,10 @@ export function createUnderlineExtension(
     name: "underline",
     tiptap: createUnderlineMark(),
     renderers: {
-      textStyle: appendRenderer(defaultUnderlineRenderers.textStyle, options.renderers?.textStyle),
+      textStyle: mergeExtensionRenderers(
+        defaultUnderlineRenderers.textStyle,
+        options.renderers?.textStyle,
+      ),
     },
   };
 }
@@ -77,9 +85,4 @@ function createUnderlineMark() {
 function markCommand(commands: unknown, name: string) {
   const command = (commands as Record<string, (() => boolean) | undefined>)[name];
   return command?.() ?? false;
-}
-
-function appendRenderer<T>(defaultRenderer: T, renderer: MaybeArray<T> | undefined): MaybeArray<T> {
-  if (renderer === undefined) return defaultRenderer;
-  return [defaultRenderer, ...(Array.isArray(renderer) ? renderer : [renderer])];
 }

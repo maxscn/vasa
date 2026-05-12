@@ -1,6 +1,11 @@
 import { TableKit, type TableKitOptions } from "@tiptap/extension-table";
 import type { CanvasRendererExtension } from "@vasa/canvas";
-import type { MaybeArray, VasaExtension, VasaExtensionRenderers } from "@vasa/core";
+import {
+  mergeExtensionRenderers,
+  type ExtensionRendererPlacement,
+  type VasaExtension,
+  type VasaExtensionRenderers,
+} from "@vasa/core";
 import type { LayoutExtension, LayoutNode, LayoutPage, LayoutStyle } from "@vasa/layout";
 import type { PdfRendererExtension } from "@vasa/pdf";
 import { tableCanvasRenderer } from "./renderers/canvas.js";
@@ -44,7 +49,7 @@ export type TableExtensionRenderers = {
 export type TableExtensionOptions = {
   tiptap?: Partial<TableKitOptions>;
   renderers?: VasaExtensionRenderers<TableExtensionRenderers>;
-  rendererPlacement?: "before" | "after";
+  rendererPlacement?: ExtensionRendererPlacement;
 };
 
 export type CreateTableNodeOptions = Omit<TableNode, "type" | "children"> & {
@@ -120,17 +125,21 @@ export function createTableExtension(
     layout: tableLayoutExtension,
     renderer: tableRenderExtension,
     renderers: {
-      canvas: mergeRenderers(
+      canvas: mergeExtensionRenderers(
         tableRenderers.canvas,
         options.renderers?.canvas,
         options.rendererPlacement,
       ),
-      webgl: mergeRenderers(
+      webgl: mergeExtensionRenderers(
         tableRenderers.webgl,
         options.renderers?.webgl,
         options.rendererPlacement,
       ),
-      pdf: mergeRenderers(tableRenderers.pdf, options.renderers?.pdf, options.rendererPlacement),
+      pdf: mergeExtensionRenderers(
+        tableRenderers.pdf,
+        options.renderers?.pdf,
+        options.rendererPlacement,
+      ),
     },
   };
 }
@@ -190,17 +199,6 @@ function isTableRenderBox(type: string) {
 
 function isTableCellType(type: string) {
   return type === "tableCell" || type === "tableHeader";
-}
-
-function mergeRenderers<T>(
-  defaultRenderer: T,
-  renderer: MaybeArray<T> | undefined,
-  placement: TableExtensionOptions["rendererPlacement"] = "after",
-): MaybeArray<T> {
-  if (renderer === undefined) return defaultRenderer;
-
-  const renderers = Array.isArray(renderer) ? renderer : [renderer];
-  return placement === "before" ? [...renderers, defaultRenderer] : [defaultRenderer, ...renderers];
 }
 
 export const TableExtension = createTableExtension();

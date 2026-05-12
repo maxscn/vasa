@@ -450,11 +450,7 @@ function boldOutlineOffset(
   if (context.syntheticBold) {
     return fauxBoldOffset(context.fontWeight, context.familyFont.weight, context.fontSize);
   }
-  return realBoldOffset(context.fontSize);
-}
-
-function realBoldOffset(fontSize: number) {
-  return Math.round(Math.max(0.35, Math.min(0.9, fontSize * 0.045)) * 100) / 100;
+  return undefined;
 }
 
 function createEditorFontUnderlineStyle(

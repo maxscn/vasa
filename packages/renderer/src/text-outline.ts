@@ -82,10 +82,14 @@ export function createTextLineOutline(
   for (const character of line.text) {
     const glyph = options.font.source.charToGlyph(character);
     const glyphCommands: TextOutlinePathCommand[] = [];
-    appendGlyphCommands(glyphCommands, glyph.getPath(x, baseline, options.fontSize).commands, {
-      skewX: options.skewX,
-      originY: baseline,
-    });
+    appendGlyphCommands(
+      glyphCommands,
+      glyph.getPath(x, baseline, options.fontSize, undefined, options.font.source).commands,
+      {
+        skewX: options.skewX,
+        originY: baseline,
+      },
+    );
     commands.push(...glyphCommands);
 
     if (options.embolden !== undefined && options.embolden > 0) {

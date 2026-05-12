@@ -10,6 +10,7 @@ import {
   createFontScriptStyle,
   createFontStrikeoutStyle,
   createFontUnderlineStyle,
+  createGoogleFontDescriptor,
   createStandardFontMetrics,
   googleFontUrlFromCss,
 } from "../src/index.ts";
@@ -107,6 +108,21 @@ test("extracts the preferred woff2 URL from Google Fonts CSS", () => {
       }
     `),
   ).toBe("https://fonts.gstatic.com/s/arimo/latin.woff2");
+});
+
+test("describes Google italic faces with distinct ids and style metadata", () => {
+  const font = createGoogleFontDescriptor("Inter", "inter/Inter-700-italic.ttf", "700", {
+    basePath: "/fonts",
+    style: "italic",
+  });
+
+  expect(font).toMatchObject({
+    id: "inter-700-italic",
+    family: "Inter",
+    source: "/fonts/inter/Inter-700-italic.ttf",
+    weight: "700",
+    style: "italic",
+  });
 });
 
 test.each([

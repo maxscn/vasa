@@ -5,9 +5,14 @@ import { analyzeWebGlScene } from "../src/index.ts";
 const outlineFont = {
   unitsPerEm: 1000,
   ascender: 750,
+  descender: -250,
   source: {
-    charToGlyph() {
+    unitsPerEm: 1000,
+    ascender: 750,
+    descender: -250,
+    charToGlyph(_character: string) {
       return {
+        index: 0,
         advanceWidth: 600,
         getPath(x: number, y: number, fontSize: number) {
           return {

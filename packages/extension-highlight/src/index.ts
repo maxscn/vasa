@@ -1,4 +1,9 @@
-import { Mark, type MaybeArray, type VasaExtension, type VasaExtensionRenderers } from "@vasa/core";
+import {
+  Mark,
+  mergeExtensionRenderers,
+  type VasaExtension,
+  type VasaExtensionRenderers,
+} from "@vasa/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -27,7 +32,10 @@ export function createHighlightExtension(
     name: "highlight",
     tiptap: createHighlightMark(),
     renderers: {
-      textStyle: appendRenderer(defaultHighlightRenderers.textStyle, options.renderers?.textStyle),
+      textStyle: mergeExtensionRenderers(
+        defaultHighlightRenderers.textStyle,
+        options.renderers?.textStyle,
+      ),
     },
   };
 }
@@ -81,9 +89,4 @@ function createHighlightMark() {
 function highlightCommand(commands: unknown) {
   const toggleHighlight = (commands as { toggleHighlight?: () => boolean }).toggleHighlight;
   return toggleHighlight?.() ?? false;
-}
-
-function appendRenderer<T>(defaultRenderer: T, renderer: MaybeArray<T> | undefined): MaybeArray<T> {
-  if (renderer === undefined) return defaultRenderer;
-  return [defaultRenderer, ...(Array.isArray(renderer) ? renderer : [renderer])];
 }

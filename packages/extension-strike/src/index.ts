@@ -1,4 +1,9 @@
-import { Mark, type MaybeArray, type VasaExtension, type VasaExtensionRenderers } from "@vasa/core";
+import {
+  Mark,
+  mergeExtensionRenderers,
+  type VasaExtension,
+  type VasaExtensionRenderers,
+} from "@vasa/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -23,7 +28,10 @@ export function createStrikeExtension(
     name: "strike",
     tiptap: createStrikeMark(),
     renderers: {
-      textStyle: appendRenderer(defaultStrikeRenderers.textStyle, options.renderers?.textStyle),
+      textStyle: mergeExtensionRenderers(
+        defaultStrikeRenderers.textStyle,
+        options.renderers?.textStyle,
+      ),
     },
   };
 }
@@ -78,9 +86,4 @@ function createStrikeMark() {
 function markCommand(commands: unknown, name: string) {
   const command = (commands as Record<string, (() => boolean) | undefined>)[name];
   return command?.() ?? false;
-}
-
-function appendRenderer<T>(defaultRenderer: T, renderer: MaybeArray<T> | undefined): MaybeArray<T> {
-  if (renderer === undefined) return defaultRenderer;
-  return [defaultRenderer, ...(Array.isArray(renderer) ? renderer : [renderer])];
 }
