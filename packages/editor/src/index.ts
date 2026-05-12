@@ -1210,6 +1210,7 @@ function deleteSelectionRange(
     if (node !== undefined) {
       node.type = "text";
       node.text = `${text.slice(0, range.start.offset)}${text.slice(range.end.offset)}`;
+      if (node.text.length === 0) delete node.marks;
     }
 
     return { doc: nextDoc, selection: range.start };

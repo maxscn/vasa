@@ -2913,6 +2913,121 @@ test("replaces and deletes expanded selections", () => {
   expect(forwardDeleted.selection).toEqual({ path: [0, 0], offset: 5 });
 });
 
+test("preserves inline styles while partially deleting a styled word", () => {
+  const styledWords = [
+    { name: "bold", marks: [{ type: "bold" }] },
+    { name: "italic", marks: [{ type: "italic" }] },
+    { name: "underline", marks: [{ type: "underline" }] },
+    { name: "strike", marks: [{ type: "strike" }] },
+    { name: "subscript", marks: [{ type: "subscript" }] },
+    { name: "superscript", marks: [{ type: "superscript" }] },
+    { name: "highlight", marks: [{ type: "highlight", attrs: { color: "#fef08a" } }] },
+    {
+      name: "textStyle",
+      marks: [
+        {
+          type: "textStyle",
+          attrs: { color: "#2563eb", backgroundColor: "#fde68a", fontSize: 18 },
+        },
+      ],
+    },
+    {
+      name: "combined",
+      marks: [
+        { type: "bold" },
+        { type: "italic" },
+        { type: "underline" },
+        { type: "strike" },
+        { type: "subscript" },
+        { type: "textStyle", attrs: { backgroundColor: "#fde68a" } },
+      ],
+    },
+  ] satisfies Array<{ name: string; marks: NonNullable<EditorJson["marks"]> }>;
+
+  for (const { name, marks } of styledWords) {
+    const doc: EditorJson = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Styled", marks }],
+        },
+      ],
+    };
+
+    expect(deleteBackward(doc, { path: [0, 0], offset: 3 }).doc, name).toEqual({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Stled", marks }],
+        },
+      ],
+    });
+    expect(deleteForward(doc, { path: [0, 0], offset: 3 }).doc, name).toEqual({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Styed", marks }],
+        },
+      ],
+    });
+    expect(
+      deleteBackward(doc, {
+        path: [0, 0],
+        offset: 4,
+        anchor: { path: [0, 0], offset: 1 },
+      }).doc,
+      name,
+    ).toEqual({
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [{ type: "text", text: "Sed", marks }],
+        },
+      ],
+    });
+  }
+});
+
+test("drops inline styles once the entire styled word is deleted", () => {
+  const doc: EditorJson = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "Styled",
+            marks: [
+              { type: "bold" },
+              { type: "italic" },
+              { type: "underline" },
+              { type: "strike" },
+              { type: "subscript" },
+              { type: "textStyle", attrs: { backgroundColor: "#fde68a" } },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  expect(
+    deleteBackward(doc, {
+      path: [0, 0],
+      offset: 6,
+      anchor: { path: [0, 0], offset: 0 },
+    }),
+  ).toEqual({
+    doc: editorDoc(""),
+    selection: { path: [0, 0], offset: 0 },
+  });
+});
+
 test("deletes selections across paragraphs", () => {
   const doc: EditorJson = {
     type: "doc",

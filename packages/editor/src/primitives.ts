@@ -77,6 +77,7 @@ function replaceTextRange(
   const text = node.text ?? "";
   node.type = "text";
   node.text = `${text.slice(0, from)}${value}${text.slice(to)}`;
+  if (node.text.length === 0) delete node.marks;
 
   return {
     doc: nextDoc,
