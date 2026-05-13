@@ -1,4 +1,4 @@
-import type { TextLine } from "@vasa/layout";
+import type { TextLine } from "@skriva/layout";
 import type { OpenTypeFont, OpenTypePathCommand } from "opentype.js";
 import { parse } from "opentype.js/dist/opentype.mjs";
 

@@ -1,11 +1,13 @@
-import type { ResolvedBoxEdges } from "@vasa/layout";
-import { resolvePageMargin } from "@vasa/layout";
-import { useEditor, useEditorPdf, type EditorConfig } from "@vasa/editor";
-import type { SvgNode } from "@vasa/extension-svg";
+import type { ResolvedBoxEdges } from "@opeinspection/skriva/layout";
+import { resolvePageMargin } from "@opeinspection/skriva/layout";
+import type { SkrivaEditorConfig } from "@opeinspection/skriva";
+import { SkrivaCanvasEditor, useSkrivaEditor, useEditorPdf } from "@opeinspection/skriva/react";
+import type { SvgNode } from "@opeinspection/skriva/enrichments/svg";
+import { createSvgDropHandler } from "@opeinspection/skriva/enrichments/svg";
 import { useMemo, useState } from "react";
-import { CanvasEditor } from "./components/canvas-editor";
 import { EditorShellProvider } from "./components/editor-shell-context";
 import { Inspector } from "./components/inspector";
+import { PagesRail } from "./components/pages-rail";
 import {
   marginPresets,
   pagePresets,
@@ -17,7 +19,7 @@ import { Toolbar } from "./components/toolbar";
 import { editorConfig } from "./editor-demo";
 
 export type EditorShellProps = {
-  config?: EditorConfig;
+  config?: SkrivaEditorConfig;
   pdfWorkerUrl: string;
   showPdfPreview?: boolean;
   showInspector?: boolean;
@@ -38,6 +40,13 @@ export function EditorShell({
   const [pageMargin, setPageMargin] = useState<ResolvedBoxEdges>(() =>
     resolvePageMargin(baseConfig.page.margin),
   );
+  const svgDropHandler = useMemo(
+    () =>
+      createSvgDropHandler({
+        addNodes: (nodes) => setDroppedSvgNodes((currentNodes) => [...currentNodes, ...nodes]),
+      }),
+    [],
+  );
   const config = useMemo(
     () => ({
       ...baseConfig,
@@ -49,22 +58,19 @@ export function EditorShell({
       onPageMarginChange: setPageMargin,
       showPageMarginGuides: showMarginOutlines,
       extraChildren: [...(baseConfig.extraChildren ?? []), ...droppedSvgNodes],
+      surfaceDropHandlers: [...(baseConfig.surfaceDropHandlers ?? []), svgDropHandler],
     }),
-    [baseConfig, droppedSvgNodes, pageMargin, pagePreset, showMarginOutlines],
+    [baseConfig, droppedSvgNodes, pageMargin, pagePreset, showMarginOutlines, svgDropHandler],
   );
-  const editor = useEditor({ config });
+  const editor = useSkrivaEditor({ config });
   const pdf = useEditorPdf({
-    document: editor.layoutTree,
-    page: config.page,
-    measurer: editor.textMeasurer,
+    renderModel: editor.renderModel,
     pageGap: config.pageGap,
     pdfWorkerUrl,
-    extensions: config.extensions,
-    metadata: { title: "Vasa editor demo", author: "Vasa" },
-    outlineText: editor.outlineText,
+    metadata: { title: "Skriva editor demo", author: "Skriva" },
     defaultTextFill: config.textColor,
     downloadTextMode: "outline",
-    downloadFileName: "vasa-editor-demo.pdf",
+    downloadFileName: "skriva-editor-demo.pdf",
     previewBitmapScale: config.canvasBitmapScale,
   });
 
@@ -73,8 +79,6 @@ export function EditorShell({
       value={{
         editor,
         pdf,
-        addDroppedSvgNodes: (nodes) =>
-          setDroppedSvgNodes((currentNodes) => [...currentNodes, ...nodes]),
         marginPreset,
         pagePreset,
         setMarginPreset: (preset) => {
@@ -91,7 +95,7 @@ export function EditorShell({
       <main className="editor-shell">
         <Toolbar />
         <section className="workspace-grid">
-          <CanvasEditor />
+          <SkrivaCanvasEditor editor={editor} rail={showPagesRail ? <PagesRail /> : null} />
           {showInspector ? <Inspector /> : null}
           {showPdfPreview ? <PdfRenderer /> : null}
         </section>

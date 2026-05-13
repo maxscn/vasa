@@ -1,12 +1,8 @@
-import {
-  deleteBackward,
-  getSelectedContent,
-  getSelectedText,
-  insertEditorContent,
-  type EditorJson,
-  type EditorSelection,
-} from "./index.ts";
+import { type JSONContent, type EditorSelection } from "./model.ts";
 import { applyKeyboardIntent } from "./keyboard.ts";
+import { insertEditorContent } from "./paste.ts";
+import { getSelectedContent, getSelectedText } from "./selection.ts";
+import { deleteBackward } from "./transforms.ts";
 import {
   trimTrailingInlineWhitespaceSelection,
   type EditorDeleteGranularity,
@@ -14,7 +10,7 @@ import {
 } from "./actions.ts";
 
 export type EditorControllerState = {
-  doc: EditorJson;
+  doc: JSONContent;
   selection: EditorSelection;
 };
 
@@ -22,7 +18,7 @@ export type EditorControllerAction =
   | {
       type: "insertText" | "paste";
       text: string;
-      content?: EditorJson | undefined;
+      content?: JSONContent | undefined;
     }
   | {
       type: "backspace" | "delete";
@@ -36,7 +32,7 @@ export type EditorControllerAction =
 export type EditorControllerResult = {
   state: EditorControllerState;
   clipboardText?: string;
-  clipboardContent?: EditorJson;
+  clipboardContent?: JSONContent;
 };
 
 export function applyEditorControllerAction(

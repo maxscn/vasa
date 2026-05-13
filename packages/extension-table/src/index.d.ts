@@ -1,8 +1,12 @@
 import { type TableKitOptions } from "@tiptap/extension-table";
-import type { CanvasRendererExtension } from "@vasa/canvas";
-import type { VasaExtension, VasaExtensionRenderers } from "@vasa/core";
-import type { LayoutNode, LayoutStyle } from "@vasa/layout";
-import type { PdfRendererExtension } from "@vasa/pdf";
+import type { CanvasRendererExtension } from "@skriva/canvas";
+import {
+  type ExtensionRendererPlacement,
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
+import type { LayoutNode, LayoutStyle } from "@skriva/layout";
+import type { PdfRendererExtension } from "@skriva/pdf";
 export type TableNode = {
   type: "table";
   id?: string;
@@ -31,13 +35,12 @@ export type TableCellNode = {
 };
 export type TableExtensionRenderers = {
   canvas: CanvasRendererExtension;
-  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 export type TableExtensionOptions = {
   tiptap?: Partial<TableKitOptions>;
-  renderers?: VasaExtensionRenderers<TableExtensionRenderers>;
-  rendererPlacement?: "before" | "after";
+  renderers?: SkrivaExtensionRenderers<TableExtensionRenderers>;
+  rendererPlacement?: ExtensionRendererPlacement;
 };
 export type CreateTableNodeOptions = Omit<TableNode, "type" | "children"> & {
   rows: Array<{
@@ -51,7 +54,7 @@ export type CreateTableNodeOptions = Omit<TableNode, "type" | "children"> & {
     >;
   }>;
 };
-declare module "@vasa/layout" {
+declare module "@skriva/layout" {
   interface LayoutNodeByType {
     table: TableNode;
     tableRow: TableRowNode;
@@ -62,5 +65,5 @@ declare module "@vasa/layout" {
 export declare function createTableNode(options: CreateTableNodeOptions): TableNode;
 export declare function createTableExtension(
   options?: TableExtensionOptions,
-): VasaExtension<TableExtensionRenderers>;
-export declare const TableExtension: VasaExtension<TableExtensionRenderers>;
+): SkrivaExtension<TableExtensionRenderers>;
+export declare const TableExtension: SkrivaExtension<TableExtensionRenderers>;

@@ -1,4 +1,4 @@
-import { parseSvgPathData, parseSvgViewBox } from "@vasa/renderer";
+import { parseSvgPathData, parseSvgViewBox } from "@skriva/renderer";
 
 export type SvgPathSpec = {
   d: string;

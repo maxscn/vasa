@@ -232,7 +232,7 @@ test("keeps mixed inline text runs on one line with run-specific metrics", () =>
           runs: [
             {
               id: "0.0",
-              text: "Vasa editor ",
+              text: "Skriva editor ",
               style: { font: "normal 400 16px sans-serif", lineHeight: 20 },
             },
             {
@@ -261,10 +261,10 @@ test("keeps mixed inline text runs on one line with run-specific metrics", () =>
   expect(result.boxes[0].lines).toEqual([
     expect.objectContaining({
       sourceId: "0.0",
-      text: "Vasa editor ",
+      text: "Skriva editor ",
       x: 0,
       y: 0,
-      width: 96,
+      width: 112,
       height: 35,
       fontSize: 16,
       fontWeight: "400",
@@ -272,7 +272,7 @@ test("keeps mixed inline text runs on one line with run-specific metrics", () =>
     expect.objectContaining({
       sourceId: "0.1",
       text: "demo",
-      x: 96,
+      x: 112,
       y: 0,
       width: 72,
       height: 35,

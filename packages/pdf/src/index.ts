@@ -1,12 +1,10 @@
 import {
   layoutDocument,
   type BoxNode,
-  type LayoutNode,
   type LayoutOptions,
   type LayoutResult,
   type Rect,
-  type TextStyle,
-} from "@vasa/layout";
+} from "@skriva/layout";
 import {
   createTextLineOutline,
   createRenderDocument,
@@ -18,43 +16,59 @@ import {
   type SvgPath,
   type TextOutlineFont,
   type TextOutlinePath,
-} from "@vasa/renderer";
-import { createElement, type ReactElement, type ReactNode } from "react";
-import Reconciler from "react-reconciler";
-import { DefaultEventPriority, NoEventPriority } from "react-reconciler/constants";
+} from "@skriva/renderer";
+import {
+  DEFAULT_BLOCKQUOTE_BORDER_WIDTH,
+  DEFAULT_PDF_TEXT_FILL,
+  DEFAULT_SERIALIZED_TEXT_FILL,
+  FIRST_DYNAMIC_PDF_OBJECT_ID,
+  LINE_THROUGH_OFFSET_RATIO,
+  MAX_PDF_FONT_SIZE,
+  MIN_PDF_FONT_SIZE,
+  MIN_TEXT_DECORATION_THICKNESS,
+  PDF_BASELINE_ADJUSTMENT_RATIO,
+  PDF_BOLD_FONT_OBJECT_ID,
+  PDF_BOLD_ITALIC_FONT_OBJECT_ID,
+  PDF_CATALOG_OBJECT_ID,
+  PDF_ITALIC_FONT_OBJECT_ID,
+  PDF_NUMBER_PRECISION,
+  PDF_ORIGIN,
+  PDF_PAGES_OBJECT_ID,
+  PDF_REGULAR_FONT_OBJECT_ID,
+  RGB_CHANNEL_MAX,
+  TEXT_DECORATION_THICKNESS_RATIO,
+} from "./constants.js";
+import { renderReactToLayoutTree } from "./reconciler/index.js";
 
-export type PdfPrimitiveType = string;
-
-export type PdfPrimitiveProps = {
-  id?: string;
-  style?: BoxNode["style"] | TextStyle;
-  children?: ReactNode;
-  [key: string]: unknown;
-};
-
-export type PdfTextProps = PdfPrimitiveProps & {
-  text?: string;
-};
-
-type PdfElementHostNode = {
-  type: string;
-  props: PdfPrimitiveProps;
-  children: PdfHostNode[];
-};
-
-type PdfTextInstanceHostNode = {
-  type: "textInstance";
-  text: string;
-  children: [];
-};
-
-export type PdfHostNode = PdfElementHostNode | PdfTextInstanceHostNode;
-
-export type PdfRootContainer = {
-  children: PdfHostNode[];
-};
+export {
+  Box,
+  Document,
+  Text,
+  View,
+  createPdfPrimitive,
+  type PdfPrimitiveComponent,
+  type PdfPrimitiveProps,
+  type PdfPrimitiveType,
+  type PdfTextProps,
+} from "./primitives.js";
+export {
+  createPdfRootContainer,
+  renderReactToLayoutTree,
+  type PdfHostNode,
+  type PdfRootContainer,
+} from "./reconciler/index.js";
 
 export type PdfRenderOptions = LayoutOptions & {
+  metadata?: PdfMetadata;
+  outlineText?: PdfOutlineTextOptions | PdfOutlineTextResolver;
+  textMode?: "native" | "outline" | "embedded";
+  defaultTextFill?: string;
+  selectableText?: boolean;
+  renderers?: PdfRendererExtension[];
+};
+
+export type PdfSceneGraphRenderOptions = {
+  page: LayoutOptions["page"];
   metadata?: PdfMetadata;
   outlineText?: PdfOutlineTextOptions | PdfOutlineTextResolver;
   textMode?: "native" | "outline" | "embedded";
@@ -110,8 +124,8 @@ export type PdfRenderNodeContext = {
   renderNode: (node: RenderNode) => PdfCommand[];
 };
 
-export type PdfRenderResult = {
-  layout: LayoutResult;
+export type PdfRenderResult<TLayout = LayoutResult> = {
+  layout: TLayout;
   commands: PdfCommand[];
   bytes: Uint8Array;
   compressedBytes: () => Promise<Uint8Array>;
@@ -123,7 +137,6 @@ export type PdfEmbeddedFont = {
 };
 
 type EmbeddedFontResource = {
-  key: string;
   name: string;
   font: TextOutlineFont;
   glyphs: Map<number, { sourceGlyphId: number; unicode: string; width: number }>;
@@ -136,30 +149,6 @@ type EmbeddedFontResource = {
   toUnicodeObject: number;
 };
 
-type ReconcilerInstance = {
-  createContainer: (...args: unknown[]) => unknown;
-  updateContainerSync?: (...args: unknown[]) => void;
-  updateContainer: (...args: unknown[]) => void;
-  flushSyncWork?: () => void;
-};
-
-export type PdfPrimitiveComponent<TProps extends PdfPrimitiveProps = PdfPrimitiveProps> = (
-  props: TProps,
-) => ReactElement;
-
-export function createPdfPrimitive<TProps extends PdfPrimitiveProps = PdfPrimitiveProps>(
-  type: PdfPrimitiveType,
-): PdfPrimitiveComponent<TProps> {
-  return function PdfPrimitive(props: TProps) {
-    return createElement(type, props);
-  };
-}
-
-export const Document = createPdfPrimitive("document");
-export const View = createPdfPrimitive("view");
-export const Box = createPdfPrimitive("box");
-export const Text = createPdfPrimitive<PdfTextProps>("text");
-
 export function renderDocumentToPdf(document: BoxNode, options: PdfRenderOptions): PdfRenderResult {
   const layout = layoutDocument(document, options);
   const commands = createPdfCommands(createRenderDocument(layout), options.page, options);
@@ -169,37 +158,28 @@ export function renderDocumentToPdf(document: BoxNode, options: PdfRenderOptions
   return { layout, commands, bytes, compressedBytes };
 }
 
+export function renderSceneGraphToPdf(
+  document: RenderDocument,
+  options: PdfSceneGraphRenderOptions,
+): PdfRenderResult<undefined> {
+  const commands = createPdfCommands(document, options.page, options);
+  const bytes = writePdf(commands, options.page, options.metadata);
+  const compressedBytes = () => writePdfAsync(commands, options.page, options.metadata);
+
+  return { layout: undefined, commands, bytes, compressedBytes };
+}
+
 export function renderReactToPdf(element: unknown, options: PdfRenderOptions): PdfRenderResult {
   return renderDocumentToPdf(renderReactToLayoutTree(element), options);
 }
 
-export function renderReactToLayoutTree(element: unknown): BoxNode {
-  const container = createPdfRootContainer();
-  const root = pdfReconciler.createContainer(
-    container,
-    0,
-    null,
-    false,
-    null,
-    "",
-    defaultErrorHandler,
-    defaultErrorHandler,
-    defaultErrorHandler,
-    null,
-  );
+export class MissingPdfCoverageError extends Error {
+  readonly code = "missing-pdf-coverage";
 
-  if (typeof pdfReconciler.updateContainerSync === "function") {
-    pdfReconciler.updateContainerSync(element, root, null, null);
-  } else {
-    pdfReconciler.updateContainer(element, root, null, null);
+  constructor(readonly sceneNodeName: string) {
+    super(`No native PDF coverage is registered for scene node "${sceneNodeName}".`);
+    this.name = "MissingPdfCoverageError";
   }
-
-  pdfReconciler.flushSyncWork?.();
-
-  const document = container.children.find((child) => child.type === "document");
-  return hostNodeToLayoutTree(
-    document ?? { type: "document", props: {}, children: container.children },
-  );
 }
 
 export function createPdfCommands(
@@ -217,7 +197,7 @@ export function createPdfCommands(
     commands.push({
       type: "beginPage",
       index: renderPage.index,
-      rect: { x: 0, y: 0, width: page.width, height: page.height },
+      rect: { x: PDF_ORIGIN, y: PDF_ORIGIN, width: page.width, height: page.height },
     });
 
     for (const node of renderPage.nodes) {
@@ -233,7 +213,13 @@ export function writePdf(
   page: LayoutOptions["page"],
   metadata: PdfMetadata = {},
 ): Uint8Array {
-  return writePdfWithStreamEncoder(commands, page, metadata, createStreamObject);
+  return writePdfWithStreamEncoder(
+    commands,
+    page,
+    metadata,
+    createStreamObject,
+    createBinaryStreamObject,
+  );
 }
 
 export async function writePdfAsync(
@@ -241,7 +227,13 @@ export async function writePdfAsync(
   page: LayoutOptions["page"],
   metadata: PdfMetadata = {},
 ): Promise<Uint8Array> {
-  return writePdfWithStreamEncoder(commands, page, metadata, createCompressedStreamObject);
+  return writePdfWithStreamEncoder(
+    commands,
+    page,
+    metadata,
+    createCompressedStreamObject,
+    createCompressedBinaryStreamObject,
+  );
 }
 
 function writePdfWithStreamEncoder(
@@ -249,29 +241,32 @@ function writePdfWithStreamEncoder(
   page: LayoutOptions["page"],
   metadata: PdfMetadata,
   streamObject: (stream: string) => PdfObject | Promise<PdfObject>,
+  binaryStreamObject: (stream: Uint8Array) => PdfObject | Promise<PdfObject>,
 ): Uint8Array;
 function writePdfWithStreamEncoder(
   commands: PdfCommand[],
   page: LayoutOptions["page"],
   metadata: PdfMetadata,
   streamObject: (stream: string) => Promise<PdfObject>,
+  binaryStreamObject: (stream: Uint8Array) => Promise<PdfObject>,
 ): Promise<Uint8Array>;
 function writePdfWithStreamEncoder(
   commands: PdfCommand[],
   page: LayoutOptions["page"],
   metadata: PdfMetadata,
   streamObject: (stream: string) => PdfObject | Promise<PdfObject>,
+  binaryStreamObject: (stream: Uint8Array) => PdfObject | Promise<PdfObject>,
 ): Uint8Array | Promise<Uint8Array> {
   const pageCommands = groupCommandsByPage(commands);
   const embeddedFonts = collectEmbeddedFonts(commands);
   const objects: PdfObject[] = [];
-  const catalogObject = 1;
-  const pagesObject = 2;
-  const fontObject = 3;
-  const boldFontObject = 4;
-  const italicFontObject = 5;
-  const boldItalicFontObject = 6;
-  let nextObjectId = 7;
+  const catalogObject = PDF_CATALOG_OBJECT_ID;
+  const pagesObject = PDF_PAGES_OBJECT_ID;
+  const fontObject = PDF_REGULAR_FONT_OBJECT_ID;
+  const boldFontObject = PDF_BOLD_FONT_OBJECT_ID;
+  const italicFontObject = PDF_ITALIC_FONT_OBJECT_ID;
+  const boldItalicFontObject = PDF_BOLD_ITALIC_FONT_OBJECT_ID;
+  let nextObjectId = FIRST_DYNAMIC_PDF_OBJECT_ID;
   for (const font of embeddedFonts) {
     font.type0Object = nextObjectId++;
     font.cidFontObject = nextObjectId++;
@@ -292,10 +287,9 @@ function writePdfWithStreamEncoder(
   objects[italicFontObject] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique >>";
   objects[boldItalicFontObject] =
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-BoldOblique >>";
-  appendEmbeddedFontObjects(objects, embeddedFonts);
-  objects[infoObject] = createInfoDictionary(metadata);
-
   const pendingStreams: Array<Promise<void>> = [];
+  appendEmbeddedFontObjects(objects, embeddedFonts, binaryStreamObject, pendingStreams);
+  objects[infoObject] = createInfoDictionary(metadata);
 
   for (const [index, pageContent] of pageCommands.entries()) {
     const pageObjectId = pageObjectIds[index];
@@ -327,10 +321,6 @@ function writePdfWithStreamEncoder(
   return encodePdfObjects(objects, catalogObject, infoObject);
 }
 
-export function createPdfRootContainer(): PdfRootContainer {
-  return { children: [] };
-}
-
 function appendPdfCommands(
   commands: PdfCommand[],
   node: RenderNode,
@@ -354,14 +344,14 @@ function appendPdfCommands(
             });
       appendPdfTextBackgroundCommands(commands, line, outlinePath);
       if (resolvedOutlineText !== undefined) {
-        const fill = resolvedOutlineText.fill ?? "#111111";
+        const fill = resolvedOutlineText.fill ?? DEFAULT_PDF_TEXT_FILL;
         if (options.textMode === "embedded") {
           commands.push({
             type: "text",
             text: line.text,
             x: line.x,
             y: line.y,
-            fontSize: Math.max(1, Math.min(line.fontSize ?? line.height, 72)),
+            fontSize: pdfFontSize(line.fontSize ?? line.height),
             fill,
             embeddedFont: { font: resolvedOutlineText.font, fill },
             ...(isBoldFontWeight(line.fontWeight) ? { fontWeight: line.fontWeight } : {}),
@@ -377,7 +367,7 @@ function appendPdfCommands(
             text: line.text,
             x: line.x,
             y: line.y,
-            fontSize: Math.max(1, Math.min(line.fontSize ?? line.height, 72)),
+            fontSize: pdfFontSize(line.fontSize ?? line.height),
             invisible: true,
             ...(isBoldFontWeight(line.fontWeight) ? { fontWeight: line.fontWeight } : {}),
             ...(line.fontStyle === undefined ? {} : { fontStyle: line.fontStyle }),
@@ -392,14 +382,14 @@ function appendPdfCommands(
         continue;
       }
 
-      const fill = line.color ?? options.defaultTextFill ?? "#111111";
+      const fill = line.color ?? options.defaultTextFill ?? DEFAULT_PDF_TEXT_FILL;
       const commandFill = line.color ?? options.defaultTextFill;
       commands.push({
         type: "text",
         text: line.text,
         x: line.x,
         y: line.y,
-        fontSize: Math.max(1, Math.min(line.fontSize ?? line.height, 72)),
+        fontSize: pdfFontSize(line.fontSize ?? line.height),
         ...(isBoldFontWeight(line.fontWeight) ? { fontWeight: line.fontWeight } : {}),
         ...(line.fontStyle === undefined ? {} : { fontStyle: line.fontStyle }),
         ...(commandFill === undefined ? {} : { fill: commandFill }),
@@ -415,6 +405,8 @@ function appendPdfCommands(
       commands.push(...extensionCommands);
       return;
     }
+
+    throw new MissingPdfCoverageError(node.name);
   }
 
   const blockquoteBorder = blockquoteBorderCommand(node);
@@ -436,7 +428,9 @@ function blockquoteBorderCommand(node: RenderNode): PdfCommand | undefined {
   if (fill === undefined) return undefined;
 
   const width =
-    typeof node.props?.blockquoteBorderWidth === "number" ? node.props.blockquoteBorderWidth : 3;
+    typeof node.props?.blockquoteBorderWidth === "number"
+      ? node.props.blockquoteBorderWidth
+      : DEFAULT_BLOCKQUOTE_BORDER_WIDTH;
 
   return {
     type: "rect",
@@ -480,17 +474,23 @@ function appendPdfTextDecorationCommands(
   }
 }
 
+function pdfFontSize(size: number) {
+  return Math.max(MIN_PDF_FONT_SIZE, Math.min(size, MAX_PDF_FONT_SIZE));
+}
+
 function textDecorationRect(
   line: RenderTextNode["lines"][number],
   fontSize: number,
   outline: TextOutlinePath | undefined,
 ): Rect {
   const horizontal = snappedTextHorizontalRect(line, outline);
-  const thickness = line.textDecorationThickness ?? Math.max(1, Math.round(fontSize * 0.06));
+  const thickness =
+    line.textDecorationThickness ??
+    Math.max(MIN_TEXT_DECORATION_THICKNESS, Math.round(fontSize * TEXT_DECORATION_THICKNESS_RATIO));
   const bounds = outline === undefined ? undefined : textOutlinePathBounds(outline);
   const fallbackOffset =
     line.textDecorationLine === "line-through"
-      ? fontSize * 0.6
+      ? fontSize * LINE_THROUGH_OFFSET_RATIO
       : Math.min(line.height - thickness, fontSize);
   const hasMetricOffset = line.textDecorationOffset !== undefined;
   const offset = line.textDecorationOffset ?? fallbackOffset;
@@ -528,7 +528,10 @@ function snappedTextHorizontalRect(
   if (bounds === undefined) return { x: Math.round(line.x), width: Math.round(line.width) };
 
   const x = Math.floor(bounds.x);
-  return { x, width: Math.max(1, Math.ceil(bounds.x + bounds.width) - x) };
+  return {
+    x,
+    width: Math.max(MIN_TEXT_DECORATION_THICKNESS, Math.ceil(bounds.x + bounds.width) - x),
+  };
 }
 
 function renderCustomNodeWithExtensions(
@@ -571,183 +574,6 @@ function isRenderTextNode(node: RenderNode): node is RenderTextNode {
   return node.kind === "text";
 }
 
-function hostNodeToLayoutTree(node: PdfHostNode): BoxNode {
-  if (isTextInstanceHostNode(node)) {
-    return { type: "box", children: [] };
-  }
-
-  if (node.type === "text") {
-    return {
-      type: "box",
-      children: [hostTextNodeToLayoutText(node)],
-    };
-  }
-
-  return {
-    type: "box",
-    id: node.props.id,
-    style: node.props.style as BoxNode["style"],
-    children: node.children.flatMap((child) => hostNodeToLayoutNodes(child)),
-  };
-}
-
-function hostNodeToLayoutNodes(node: PdfHostNode): LayoutNode[] {
-  if (isTextInstanceHostNode(node)) return [];
-  if (node.type === "text") return [hostTextNodeToLayoutText(node)];
-  if (node.type !== "document" && node.type !== "view" && node.type !== "box") {
-    return [hostNodeToCustomLayoutNode(node)];
-  }
-  return [hostNodeToLayoutTree(node)];
-}
-
-function hostTextNodeToLayoutText(node: PdfElementHostNode) {
-  return {
-    type: "text" as const,
-    id: node.props.id,
-    text: typeof node.props.text === "string" ? node.props.text : collectText(node),
-    style: node.props.style as TextStyle,
-  };
-}
-
-function collectText(node: PdfHostNode): string {
-  if (isTextInstanceHostNode(node)) return node.text;
-  return node.children.map((child) => collectText(child)).join("");
-}
-
-function hostNodeToCustomLayoutNode(node: PdfElementHostNode): LayoutNode {
-  return {
-    ...primitiveProps(node.props),
-    type: node.type,
-    id: node.props.id,
-    style: node.props.style as LayoutNode["style"],
-    children: node.children.flatMap((child) => hostNodeToLayoutNodes(child)),
-  } as LayoutNode;
-}
-
-function primitiveProps(props: PdfPrimitiveProps): Record<string, unknown> {
-  const { children, id, style, ...rest } = props;
-  void children;
-  void id;
-  void style;
-  return rest;
-}
-
-function childList(parent: PdfElementHostNode | PdfRootContainer): PdfHostNode[] {
-  return parent.children;
-}
-
-function appendChild(parent: PdfElementHostNode | PdfRootContainer, child: PdfHostNode) {
-  childList(parent).push(child);
-}
-
-function insertBefore(
-  parent: PdfElementHostNode | PdfRootContainer,
-  child: PdfHostNode,
-  beforeChild: PdfHostNode,
-) {
-  const children = childList(parent);
-  const existingIndex = children.indexOf(child);
-  if (existingIndex >= 0) children.splice(existingIndex, 1);
-
-  const index = children.indexOf(beforeChild);
-  children.splice(index < 0 ? children.length : index, 0, child);
-}
-
-function removeChild(parent: PdfElementHostNode | PdfRootContainer, child: PdfHostNode) {
-  const children = childList(parent);
-  const index = children.indexOf(child);
-  if (index >= 0) children.splice(index, 1);
-}
-
-function createHostNode(type: string, props: PdfPrimitiveProps): PdfHostNode {
-  return { type, props, children: [] };
-}
-
-function commitUpdate(
-  instance: PdfHostNode,
-  _type: string,
-  _oldProps: PdfPrimitiveProps,
-  newProps: PdfPrimitiveProps,
-) {
-  if (!isTextInstanceHostNode(instance)) {
-    instance.props = newProps;
-  }
-}
-
-function isTextInstanceHostNode(node: PdfHostNode): node is PdfTextInstanceHostNode {
-  return "text" in node;
-}
-
-const pdfReconciler = Reconciler({
-  supportsMutation: true,
-  supportsPersistence: false,
-  supportsHydration: false,
-  isPrimaryRenderer: false,
-  noTimeout: -1,
-  getRootHostContext: () => null,
-  getChildHostContext: () => null,
-  getPublicInstance: (instance: PdfHostNode) => instance,
-  prepareForCommit: () => null,
-  resetAfterCommit: () => undefined,
-  createInstance: createHostNode,
-  appendInitialChild: appendChild,
-  finalizeInitialChildren: () => false,
-  shouldSetTextContent: () => false,
-  createTextInstance: (text: string) => ({ type: "textInstance", text, children: [] }),
-  appendChild,
-  appendChildToContainer: appendChild,
-  insertBefore,
-  insertInContainerBefore: insertBefore,
-  removeChild,
-  removeChildFromContainer: removeChild,
-  clearContainer: (container: PdfRootContainer) => {
-    container.children = [];
-    return false;
-  },
-  prepareUpdate: () => true,
-  commitUpdate,
-  commitTextUpdate: (textInstance: PdfTextInstanceHostNode, _oldText: string, newText: string) => {
-    textInstance.text = newText;
-  },
-  resetTextContent: () => undefined,
-  hideInstance: () => undefined,
-  hideTextInstance: () => undefined,
-  unhideInstance: () => undefined,
-  unhideTextInstance: () => undefined,
-  getCurrentEventPriority: () => DefaultEventPriority,
-  resolveUpdatePriority: () => DefaultEventPriority,
-  setCurrentUpdatePriority: () => undefined,
-  getCurrentUpdatePriority: () => NoEventPriority,
-  maySuspendCommit: () => false,
-  startSuspendingCommit: () => undefined,
-  suspendInstance: () => undefined,
-  suspendOnActiveViewTransition: () => undefined,
-  waitForCommitToBeReady: () => null,
-  NotPendingTransition: null,
-  HostTransitionContext: {},
-  resetFormInstance: () => undefined,
-  requestPostPaintCallback: () => undefined,
-  trackSchedulerEvent: () => undefined,
-  resolveEventType: () => null,
-  resolveEventTimeStamp: () => -1.1,
-  shouldAttemptEagerTransition: () => false,
-  detachDeletedInstance: () => undefined,
-  beforeActiveInstanceBlur: () => undefined,
-  afterActiveInstanceBlur: () => undefined,
-  preparePortalMount: () => undefined,
-  scheduleTimeout: setTimeout,
-  cancelTimeout: clearTimeout,
-  supportsMicrotasks: true,
-  scheduleMicrotask: queueMicrotask,
-  isTimeoutScheduled: () => false,
-  getInstanceFromNode: () => null,
-  beforeCommit: () => undefined,
-  afterCommit: () => undefined,
-  prepareScopeUpdate: () => undefined,
-  getInstanceFromScope: () => null,
-  setFocusIfFocusable: () => false,
-}) as ReconcilerInstance;
-
 function groupCommandsByPage(commands: PdfCommand[]) {
   const groups: PdfCommand[][] = [];
   let current: PdfCommand[] | undefined;
@@ -767,7 +593,7 @@ function groupCommandsByPage(commands: PdfCommand[]) {
 }
 
 function collectEmbeddedFonts(commands: PdfCommand[]): EmbeddedFontResource[] {
-  const resources = new Map<string, EmbeddedFontResource>();
+  const resources = new Map<TextOutlineFont, EmbeddedFontResource>();
 
   for (const command of commands) {
     if (
@@ -778,11 +604,9 @@ function collectEmbeddedFonts(commands: PdfCommand[]): EmbeddedFontResource[] {
       continue;
 
     const font = command.embeddedFont.font;
-    const key = embeddedFontKey(font);
-    let resource = resources.get(key);
+    let resource = resources.get(font);
     if (resource === undefined) {
       resource = {
-        key,
         name: `EF${resources.size + 1}`,
         font,
         glyphs: new Map(),
@@ -794,7 +618,7 @@ function collectEmbeddedFonts(commands: PdfCommand[]): EmbeddedFontResource[] {
         fileObject: 0,
         toUnicodeObject: 0,
       };
-      resources.set(key, resource);
+      resources.set(font, resource);
     }
 
     for (const character of command.text) {
@@ -817,7 +641,12 @@ function collectEmbeddedFonts(commands: PdfCommand[]): EmbeddedFontResource[] {
   }));
 }
 
-function appendEmbeddedFontObjects(objects: PdfObject[], fonts: EmbeddedFontResource[]) {
+function appendEmbeddedFontObjects(
+  objects: PdfObject[],
+  fonts: EmbeddedFontResource[],
+  binaryStreamObject: (stream: Uint8Array) => PdfObject | Promise<PdfObject>,
+  pendingStreams: Array<Promise<void>>,
+) {
   for (const font of fonts) {
     const glyphIds = [...font.glyphs.keys()].sort((left, right) => left - right);
     const descender = font.font.descender ?? -Math.round(font.font.ascender * 0.25);
@@ -836,7 +665,16 @@ function appendEmbeddedFontObjects(objects: PdfObject[], fonts: EmbeddedFontReso
       )}] /ItalicAngle 0 /Ascent ${Math.round(font.font.ascender)} /Descent ${Math.round(
         descender,
       )} /CapHeight ${Math.round(font.font.ascender)} /StemV 80 /FontFile2 ${font.fileObject} 0 R >>`;
-    objects[font.fileObject] = createBinaryStreamObject(font.subsetBytes);
+    const fontFileStream = binaryStreamObject(font.subsetBytes);
+    if (isPdfObject(fontFileStream)) {
+      objects[font.fileObject] = fontFileStream;
+    } else {
+      pendingStreams.push(
+        fontFileStream.then((resolved) => {
+          objects[font.fileObject] = resolved;
+        }),
+      );
+    }
     objects[font.toUnicodeObject] = createStreamObject(toUnicodeCMap(font, glyphIds));
   }
 }
@@ -846,12 +684,7 @@ function embeddedFontForCommand(
   fonts: EmbeddedFontResource[],
 ) {
   if (command.embeddedFont === undefined) return undefined;
-  const key = embeddedFontKey(command.embeddedFont.font);
-  return fonts.find((font) => font.key === key);
-}
-
-function embeddedFontKey(font: TextOutlineFont) {
-  return `${font.unitsPerEm}:${font.ascender}:${font.descender ?? ""}:${font.bytes?.byteLength ?? 0}`;
+  return fonts.find((font) => font.font === command.embeddedFont?.font);
 }
 
 function textToGlyphHex(text: string, font: EmbeddedFontResource) {
@@ -872,10 +705,12 @@ function createSubsetFontBytes(resource: EmbeddedFontResource) {
     constructor: new (options: Record<string, unknown>) => { toArrayBuffer(): ArrayBuffer };
     glyphs: { get(index: number): unknown };
     names?: { unicode?: { fontFamily?: { en?: string }; fontSubfamily?: { en?: string } } };
+    variation?: { getTransform(glyph: unknown, coords?: Record<string, number>): unknown };
+    defaultRenderOptions?: { variation?: Record<string, number> };
   };
   const sourceGlyphs = [0, ...[...resource.glyphs.values()].map((glyph) => glyph.sourceGlyphId)];
   const glyphs = sourceGlyphs.map((glyphId, index) =>
-    cloneGlyph(sourceFont.glyphs.get(glyphId), index),
+    cloneGlyph(embeddedSourceGlyph(sourceFont, glyphId), index),
   );
   const familyName = sourceFont.names?.unicode?.fontFamily?.en ?? resource.name;
   const styleName = sourceFont.names?.unicode?.fontSubfamily?.en ?? "Regular";
@@ -889,6 +724,18 @@ function createSubsetFontBytes(resource: EmbeddedFontResource) {
   });
 
   return new Uint8Array(font.toArrayBuffer());
+}
+
+function embeddedSourceGlyph(
+  font: {
+    glyphs: { get(index: number): unknown };
+    variation?: { getTransform(glyph: unknown, coords?: Record<string, number>): unknown };
+    defaultRenderOptions?: { variation?: Record<string, number> };
+  },
+  glyphId: number,
+) {
+  const glyph = font.glyphs.get(glyphId);
+  return font.variation?.getTransform(glyph, font.defaultRenderOptions?.variation) ?? glyph;
 }
 
 function cloneGlyph(source: unknown, index: number) {
@@ -934,7 +781,7 @@ function toUnicodeCMap(font: EmbeddedFontResource, glyphIds: number[]) {
     "12 dict begin",
     "begincmap",
     "/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def",
-    "/CMapName /VasaToUnicode def",
+    "/CMapName /SkrivaToUnicode def",
     "/CMapType 2 def",
     "1 begincodespacerange",
     "<0000> <ffff>",
@@ -987,7 +834,10 @@ function serializePageCommands(
       const x = formatNumber(command.x);
       const y = formatNumber(
         embeddedFont === undefined
-          ? page.height - command.y - command.fontSize + command.fontSize * 0.25
+          ? page.height -
+              command.y -
+              command.fontSize +
+              command.fontSize * PDF_BASELINE_ADJUSTMENT_RATIO
           : page.height -
               command.y -
               (embeddedFont.font.ascender / embeddedFont.font.unitsPerEm) * command.fontSize,
@@ -996,7 +846,7 @@ function serializePageCommands(
       const font = embeddedFont?.name ?? pdfFontResource(command);
       return [
         "BT",
-        `${serializeFillColor(command.fill ?? "#000000")} rg`,
+        `${serializeFillColor(command.fill ?? DEFAULT_SERIALIZED_TEXT_FILL)} rg`,
         command.invisible === true ? "3 Tr" : undefined,
         `/${font} ${fontSize} Tf`,
         `1 0 0 1 ${x} ${y} Tm`,
@@ -1086,6 +936,15 @@ function createBinaryStreamObject(stream: Uint8Array) {
   );
 }
 
+async function createCompressedBinaryStreamObject(stream: Uint8Array) {
+  const compressed = await flateDeflate(stream);
+  return concatBytes(
+    new TextEncoder().encode(`<< /Length ${compressed.length} /Filter /FlateDecode >>\nstream\n`),
+    compressed,
+    new TextEncoder().encode("\nendstream"),
+  );
+}
+
 async function createCompressedStreamObject(stream: string) {
   const compressed = await flateDeflate(new TextEncoder().encode(stream));
   return concatBytes(
@@ -1111,7 +970,7 @@ function createInfoDictionary(metadata: PdfMetadata) {
   const entries = [
     metadata.title === undefined ? undefined : `/Title (${escapePdfString(metadata.title)})`,
     metadata.author === undefined ? undefined : `/Author (${escapePdfString(metadata.author)})`,
-    "/Producer (Vasa PDF)",
+    "/Producer (Skriva PDF)",
   ].filter((entry) => entry !== undefined);
 
   return `<< ${entries.join(" ")} >>`;
@@ -1175,7 +1034,7 @@ function byteLength(value: string) {
 function formatNumber(value: number) {
   return Number.isInteger(value)
     ? String(value)
-    : value.toFixed(6).replaceAll(/0+$/g, "").replaceAll(/\.$/g, "");
+    : value.toFixed(PDF_NUMBER_PRECISION).replaceAll(/0+$/g, "").replaceAll(/\.$/g, "");
 }
 
 function serializePath(path: TextOutlinePath | SvgPath) {
@@ -1208,7 +1067,7 @@ function serializePath(path: TextOutlinePath | SvgPath) {
 
 function serializeFillColor(fill: string) {
   const rgb = parseHexColor(fill);
-  return rgb.map((channel) => formatNumber(channel / 255)).join(" ");
+  return rgb.map((channel) => formatNumber(channel / RGB_CHANNEL_MAX)).join(" ");
 }
 
 function parseHexColor(fill: string) {
@@ -1235,8 +1094,4 @@ function escapePdfString(value: string) {
     .replaceAll("(", "\\(")
     .replaceAll(")", "\\)")
     .replaceAll("\n", "\\n");
-}
-
-function defaultErrorHandler(error: unknown) {
-  throw error;
 }

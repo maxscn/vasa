@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-font-family",
+  "name": "@skriva/extension-font-family",
   "version": "0.0.0",
-  "description": "Font family extension for Vasa.",
+  "description": "Font family extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,8 +22,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/core": "workspace:*",
-    "@vasa/extension-text-style": "workspace:*"
+    "@skriva/core": "workspace:*",
+    "@skriva/extension-text-style": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

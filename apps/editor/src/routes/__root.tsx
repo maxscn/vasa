@@ -13,7 +13,7 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Vasa Editor Demo",
+        title: "Skriva Editor Demo",
       },
     ],
     links: [

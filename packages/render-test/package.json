@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/render-test",
+  "name": "@skriva/render-test",
   "version": "0.0.0",
-  "description": "Pixel comparison utilities for Vasa renderers.",
+  "description": "Pixel comparison utilities for Skriva renderers.",
   "homepage": "https://github.com/author/library#readme",
   "bugs": {
     "url": "https://github.com/author/library/issues"
@@ -32,9 +32,9 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "0.1.100",
-    "@vasa/canvas": "workspace:*",
-    "@vasa/layout": "workspace:*",
-    "@vasa/renderer": "workspace:*",
+    "@skriva/canvas": "workspace:*",
+    "@skriva/layout": "workspace:*",
+    "@skriva/renderer": "workspace:*",
     "pdfjs-dist": "catalog:"
   },
   "devDependencies": {

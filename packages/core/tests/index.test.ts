@@ -1,33 +1,33 @@
 import { expect, test } from "vite-plus/test";
 import { Extension } from "@tiptap/core";
-import type { LayoutNodeBase } from "@vasa/layout";
+import type { LayoutNodeBase } from "@skriva/layout";
 import {
   collectExtensionRenderers,
   collectLayoutExtensions,
   collectRendererExtensions,
-  createVasaExtension,
+  createSkrivaExtension,
   mergeExtensionRenderers,
-  type VasaExtension,
+  type SkrivaExtension,
 } from "../src/index.ts";
 
 type TestRuleNode = LayoutNodeBase<"testRule"> & {
   thickness: number;
 };
 
-declare module "@vasa/layout" {
+declare module "@skriva/layout" {
   interface LayoutNodeByType {
     testRule: TestRuleNode;
   }
 }
 
-test("creates Vasa extensions that can carry Tiptap behavior and renderer hooks", () => {
+test("creates Skriva extensions that can carry Tiptap behavior and renderer hooks", () => {
   const tiptap = Extension.create({ name: "callout" });
   const renderer = {
     name: "callout",
     toRenderNode: () => undefined,
   };
 
-  const extension = createVasaExtension({
+  const extension = createSkrivaExtension({
     name: "callout",
     tiptap,
     renderer,
@@ -39,19 +39,19 @@ test("creates Vasa extensions that can carry Tiptap behavior and renderer hooks"
 });
 
 test("collects renderer extensions without exposing renderers to Tiptap plugins", () => {
-  const extensions: VasaExtension[] = [
-    createVasaExtension({
+  const extensions: SkrivaExtension[] = [
+    createSkrivaExtension({
       name: "one",
       renderer: { name: "one", toRenderNode: () => undefined },
     }),
-    createVasaExtension({
+    createSkrivaExtension({
       name: "two",
       renderer: [
         { name: "two-a", toRenderNode: () => undefined },
         { name: "two-b", toRenderNode: () => undefined },
       ],
     }),
-    createVasaExtension({
+    createSkrivaExtension({
       name: "editing-only",
       tiptap: Extension.create({ name: "editing-only" }),
     }),
@@ -65,8 +65,8 @@ test("collects renderer extensions without exposing renderers to Tiptap plugins"
 });
 
 test("collects layout extensions for measurable document parts", () => {
-  const extensions: VasaExtension[] = [
-    createVasaExtension({
+  const extensions: SkrivaExtension[] = [
+    createSkrivaExtension({
       name: "test-rule",
       layout: {
         name: "test-rule",
@@ -74,7 +74,7 @@ test("collects layout extensions for measurable document parts", () => {
         measure: () => ({ width: 100, height: 2 }),
       },
     }),
-    createVasaExtension({
+    createSkrivaExtension({
       name: "editing-only",
       tiptap: Extension.create({ name: "editing-only" }),
     }),
@@ -94,12 +94,12 @@ test("collects named renderer adapters from extension registries", () => {
   const canvasRenderer = (value: string) => `canvas:${value}`;
   const extraCanvasRenderer = (value: string) => `extra-canvas:${value}`;
   const pdfRenderer = (value: string) => `pdf:${value}`;
-  const extensions: Array<VasaExtension<Renderers>> = [
-    createVasaExtension({
+  const extensions: Array<SkrivaExtension<Renderers>> = [
+    createSkrivaExtension({
       name: "bold",
       renderers: { canvas: [canvasRenderer, extraCanvasRenderer] },
     }),
-    createVasaExtension({ name: "fontFamily", renderers: { pdf: pdfRenderer } }),
+    createSkrivaExtension({ name: "fontFamily", renderers: { pdf: pdfRenderer } }),
   ];
 
   expect(collectExtensionRenderers(extensions, "canvas")).toEqual([

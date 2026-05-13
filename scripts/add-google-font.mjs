@@ -40,7 +40,7 @@ for (const destination of destinations) {
 
 console.log(`Added ${args.family} from Google Fonts.`);
 console.log(`Font file: ${fileName} (source: ${fontFile.name})`);
-console.log(`App URL: /__vasa-assets/fonts/google/${slug}/${fileName}`);
+console.log(`App URL: /__skriva-assets/fonts/google/${slug}/${fileName}`);
 
 function parseArgs(values) {
   const parsed = {};
@@ -66,7 +66,7 @@ async function googleFontsDirectory(slug) {
   for (const license of ["ofl", "apache", "ufl"]) {
     const path = `${license}/${slug}`;
     const response = await fetch(`https://api.github.com/repos/google/fonts/contents/${path}`, {
-      headers: { "User-Agent": "vasa-font-installer" },
+      headers: { "User-Agent": "skriva-font-installer" },
     });
     if (response.ok) return path;
   }
@@ -94,20 +94,20 @@ function selectFontFile(files, family, weight, style) {
 }
 
 async function githubJson(url) {
-  const response = await fetch(url, { headers: { "User-Agent": "vasa-font-installer" } });
+  const response = await fetch(url, { headers: { "User-Agent": "skriva-font-installer" } });
   if (!response.ok)
     throw new Error(`GitHub request failed: ${response.status} ${response.statusText}`);
   return response.json();
 }
 
 async function githubBytes(url) {
-  const response = await fetch(url, { headers: { "User-Agent": "vasa-font-installer" } });
+  const response = await fetch(url, { headers: { "User-Agent": "skriva-font-installer" } });
   if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
   return new Uint8Array(await response.arrayBuffer());
 }
 
 async function githubText(url) {
-  const response = await fetch(url, { headers: { "User-Agent": "vasa-font-installer" } });
+  const response = await fetch(url, { headers: { "User-Agent": "skriva-font-installer" } });
   if (!response.ok) throw new Error(`Download failed: ${response.status} ${response.statusText}`);
   return response.text();
 }

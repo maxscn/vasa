@@ -1,7 +1,7 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildCanvasScene } from "../packages/canvas/dist/index.mjs";
+import { Scene } from "../packages/canvas/dist/index.mjs";
 import {
   createEditorLayoutTree,
   createEditorTextStyleForFont,
@@ -32,12 +32,12 @@ const page = {
 };
 const font = {
   id: "liberation-sans",
-  family: "Vasa Liberation Sans",
+  family: "Skriva Liberation Sans",
   displayName: "Liberation Sans",
   weight: "400",
   style: "normal",
   fallbackFamilies: ["Arial", "sans-serif"],
-  cssFamily: '"Vasa Liberation Sans", Arial, sans-serif',
+  cssFamily: '"Skriva Liberation Sans", Arial, sans-serif',
   outlineFont,
 };
 const textFontSize = 16;
@@ -48,7 +48,7 @@ const editorDocument = {
     {
       type: "paragraph",
       content: [
-        { type: "text", text: "Vasa " },
+        { type: "text", text: "Skriva " },
         {
           type: "text",
           text: "editor",
@@ -116,7 +116,7 @@ const comparison = await comparePdfAndCanvasRenderers({
     },
   },
 });
-const scene = buildCanvasScene(renderDocument, {
+const scene = Scene(renderDocument, {
   text: (box, lineIndex) => {
     const line = box.lines?.[lineIndex];
     return {

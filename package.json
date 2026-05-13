@@ -1,5 +1,5 @@
 {
-  "name": "vasa",
+  "name": "skriva",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "prepare": "vp config"
   },
   "devDependencies": {
-    "@vasa/render-test": "workspace:*",
+    "@skriva/render-test": "workspace:*",
     "vite-plus": "catalog:"
   },
   "engines": {

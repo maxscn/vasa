@@ -1,4 +1,4 @@
-import { type BoxNode, type TextStyle } from "@vasa/layout";
+import { type BoxNode, type TextStyle } from "@skriva/layout";
 import { createElement, type ReactElement, type ReactNode } from "react";
 
 export type CanvasPrimitiveType = string;

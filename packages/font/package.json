@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/font",
+  "name": "@skriva/font",
   "version": "0.0.0",
-  "description": "Shared font loading and rendering helpers for Vasa.",
+  "description": "Shared font loading and rendering helpers for Skriva.",
   "homepage": "https://github.com/author/library#readme",
   "bugs": {
     "url": "https://github.com/author/library/issues"
@@ -31,7 +31,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/renderer": "workspace:*",
+    "@skriva/renderer": "workspace:*",
     "wawoff2": "catalog:"
   },
   "devDependencies": {

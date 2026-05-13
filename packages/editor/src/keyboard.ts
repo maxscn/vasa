@@ -5,7 +5,8 @@ import {
   type EditorDeleteGranularity,
   type EditorTextLine,
 } from "./actions.ts";
-import { insertText, type EditorJson, type EditorSelection } from "./index.ts";
+import { type JSONContent, type EditorSelection } from "./model.ts";
+import { insertText } from "./transforms.ts";
 import {
   moveSelectionHorizontally,
   type EditorRenderLineDocument,
@@ -33,10 +34,10 @@ export type EditorKeyboardEventLike = {
 };
 
 export function applyKeyboardIntent(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   intent: EditorKeyboardIntent,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   if (intent.type === "insertText") {
     return insertText(doc, selection, intent.text);
   }
@@ -99,7 +100,7 @@ export function arrowMovementGranularity(event: EditorKeyboardEventLike) {
 }
 
 export function moveSelectionHorizontallyByKeyboard(
-  doc: EditorJson,
+  doc: JSONContent,
   renderDocument: EditorRenderLineDocument,
   selection: EditorSelection,
   event: EditorKeyboardEventLike,

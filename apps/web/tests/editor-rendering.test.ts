@@ -1,30 +1,31 @@
 import {
-  buildCanvasScene,
+  Scene,
   createCanvasCommands,
   type CanvasCommand,
   type CanvasNode,
   type CanvasRendererExtension,
+  type CanvasSurface,
   type CanvasScene,
-} from "@vasa/canvas";
+} from "@opeinspection/skriva/canvas";
 import {
   collectExtensionRenderers,
   collectLayoutExtensions,
   collectRendererExtensions,
-} from "@vasa/core";
+} from "@opeinspection/skriva/enrichment";
 import {
   createEditorParityDocument,
   createEditorRenderDocument,
   createEditorRenderTextMeasurer,
-  type EditorJson,
+  type JSONContent,
   type EditorRenderProfileOptions,
-} from "@vasa/editor";
+} from "@opeinspection/skriva";
 import {
   createFontRegistry,
   createFontStrikeoutStyle,
   type FontDescriptor,
-  type VasaFont,
-} from "@vasa/font";
-import { createRenderDocument, textOutlinePathBounds } from "@vasa/renderer";
+  type SkrivaFont,
+} from "@opeinspection/skriva/font";
+import { createRenderDocument, textOutlinePathBounds } from "@opeinspection/skriva/renderer";
 import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { webEditorConfig } from "../src/editor-config.ts";
@@ -66,13 +67,12 @@ test("renders the web editor parity sheet with loaded outline font geometry", as
     },
   });
 
+  const descriptors = parityFontDescriptorsForFamily("Arimo");
   const registry = createFontRegistry();
-  const arimo = await registry.register({
-    ...webEditorConfig.bundledFont,
-    source: webEditorConfig.bundledFontSource,
-  });
+  const fonts = await Promise.all(descriptors.map((descriptor) => registry.register(descriptor)));
+  const arimo = fontByWeight(fonts, "400");
   const profile: EditorRenderProfileOptions = {
-    fonts: [arimo],
+    fonts,
     defaultFontId: arimo.id,
     fallbackFont: arimo,
     fontSize: webEditorConfig.textFontSize,
@@ -93,7 +93,7 @@ test("renders the web editor parity sheet with loaded outline font geometry", as
     rendererExtensions: collectRendererExtensions(webEditorConfig.extensions),
     createRenderDocument,
   });
-  const scene = buildCanvasScene(contract.renderDocument, {
+  const scene = Scene(contract.renderDocument, {
     pageGap: webEditorConfig.pageGap,
     extensions: collectExtensionRenderers(
       webEditorConfig.extensions,
@@ -125,10 +125,13 @@ for (const fixture of googleFontFixtures) {
       },
     });
 
-    const descriptors = fontDescriptorsForFamily(fixture.family);
+    const descriptors = parityFontDescriptorsForFamily(fixture.family);
     const registry = createFontRegistry();
     const fonts = await Promise.all(descriptors.map((descriptor) => registry.register(descriptor)));
     const regularFont = fontByWeight(fonts, "400");
+    const supportsBoldItalic = descriptors.some(
+      (descriptor) => descriptor.weight === "700" && descriptor.style === "italic",
+    );
     const profile: EditorRenderProfileOptions = {
       fonts,
       defaultFontId: regularFont.id,
@@ -141,7 +144,12 @@ for (const fixture of googleFontFixtures) {
     };
     const scene = renderWebParityScene(
       profile,
-      withFontId(createEditorParityDocument(), regularFont.id),
+      withFontId(
+        supportsBoldItalic
+          ? createEditorParityDocument()
+          : withoutMark(createEditorParityDocument(), "italic"),
+        regularFont.id,
+      ),
     );
     const lines = canvasTextLines(scene);
     const boldItalic = lineByText(lines, "bold italic");
@@ -246,7 +254,10 @@ function fontFixture(family: string, slug: string, regular: string, bold: string
 }
 
 type CanvasTextLine = Extract<CanvasNode, { kind: "textLine" }>;
-type FillRectCommand = Extract<CanvasCommand, { type: "fillRect" }>;
+type FillRectOperation = {
+  rect: { x: number; y: number; width: number; height: number };
+  fill?: string;
+};
 
 function canvasTextLines(scene: CanvasScene) {
   return scene.pages.flatMap((page) => flattenCanvasTextLines(page.children));
@@ -266,7 +277,7 @@ function lineByText(lines: CanvasTextLine[], text: string) {
   return line!;
 }
 
-function fontByWeight(fonts: VasaFont[], weight: string) {
+function fontByWeight(fonts: SkrivaFont[], weight: string) {
   const font = fonts.find((candidate) => candidate.weight === weight);
   expect(font, `Expected font with weight ${weight}`).toBeDefined();
   return font!;
@@ -278,6 +289,12 @@ function fontDescriptorsForFamily(family: string) {
   );
   expect(descriptors, `Expected descriptors for ${family}`).not.toHaveLength(0);
   return descriptors;
+}
+
+function parityFontDescriptorsForFamily(family: string) {
+  return fontDescriptorsForFamily(family).filter(
+    (descriptor) => descriptor.weight === "400" || descriptor.weight === "700",
+  );
 }
 
 function renderWebParityScene(
@@ -297,7 +314,7 @@ function renderWebParityScene(
     createRenderDocument,
   });
 
-  return buildCanvasScene(contract.renderDocument, {
+  return Scene(contract.renderDocument, {
     pageGap: webEditorConfig.pageGap,
     extensions: collectExtensionRenderers(
       webEditorConfig.extensions,
@@ -307,7 +324,7 @@ function renderWebParityScene(
   });
 }
 
-function withFontId(node: EditorJson, fontId: string): EditorJson {
+function withFontId(node: JSONContent, fontId: string): JSONContent {
   return {
     ...node,
     marks:
@@ -321,9 +338,17 @@ function withFontId(node: EditorJson, fontId: string): EditorJson {
   };
 }
 
-function textStyleMark(node: EditorJson, fontId: string) {
+function textStyleMark(node: JSONContent, fontId: string) {
   const textStyleAttrs = node.marks?.find((mark) => mark.type === "textStyle")?.attrs ?? {};
   return { type: "textStyle", attrs: { ...textStyleAttrs, fontId } };
+}
+
+function withoutMark(node: JSONContent, markType: string): JSONContent {
+  return {
+    ...node,
+    marks: node.marks?.filter((mark) => mark.type !== markType),
+    content: node.content?.map((child) => withoutMark(child, markType)),
+  };
 }
 
 function expectCanvasStrikeCommandInterop(scene: CanvasScene, line: CanvasTextLine) {
@@ -354,12 +379,11 @@ function expectCanvasStrikeCommandInterop(scene: CanvasScene, line: CanvasTextLi
 function canvasDecorationCommand(
   commands: CanvasCommand[],
   line: CanvasTextLine,
-): FillRectCommand | undefined {
+): FillRectOperation | undefined {
   const expectedY = Math.round(line.y + (line.textDecorationOffset ?? 0));
   const expectedFill = line.textDecorationColor ?? line.fill;
 
-  for (const command of commands) {
-    if (!isFillRectCommand(command)) continue;
+  for (const command of commands.flatMap((candidate) => fillRectOperations(candidate))) {
     if (
       command.fill === expectedFill &&
       command.rect.y === expectedY &&
@@ -372,8 +396,26 @@ function canvasDecorationCommand(
   return undefined;
 }
 
-function isFillRectCommand(command: CanvasCommand): command is FillRectCommand {
-  return command.type === "fillRect";
+function fillRectOperations(command: CanvasCommand): FillRectOperation[] {
+  const operations: FillRectOperation[] = [];
+  const surface: CanvasSurface = {
+    clearRect() {},
+    fillRect(x, y, width, height) {
+      operations.push({ rect: { x, y, width, height }, fill: surface.fillStyle });
+    },
+    strokeRect() {},
+    fillText() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    bezierCurveTo() {},
+    closePath() {},
+    fill() {},
+    stroke() {},
+  };
+
+  command.apply(surface);
+  return operations;
 }
 
 function expectLineRunsDoNotOverlap(lines: CanvasTextLine[]) {

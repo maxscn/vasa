@@ -1,12 +1,12 @@
-import type { EditorJson } from "./index.ts";
+import type { JSONContent } from "./model.ts";
 
-export function createEditorParityDocument(): EditorJson {
+export function createEditorParityDocument(): JSONContent {
   return {
     type: "doc",
     content: [
       {
         type: "paragraph",
-        content: [{ type: "text", text: "Vasa editor parity sheet" }],
+        content: [{ type: "text", text: "Skriva editor parity sheet" }],
       },
       {
         type: "paragraph",

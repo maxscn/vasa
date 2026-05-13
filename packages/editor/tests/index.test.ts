@@ -1,10 +1,21 @@
 // @vitest-environment happy-dom
-import { buildCanvasScene, type CanvasNode, type CanvasScene } from "@vasa/canvas";
-import { generateHTML, generateJSON, getSchema } from "@vasa/core";
-import { createFontStrikeoutStyle, createStandardFontMetrics, type VasaFont } from "@vasa/font";
-import { layoutDocument, type LayoutResult } from "@vasa/layout";
-import { createRenderDocument, type TextOutlineFont } from "@vasa/renderer";
-import { analyzeWebGlScene } from "@vasa/webgl";
+import { Scene, type CanvasNode, type CanvasScene } from "@skriva/canvas";
+import { Editor, generateHTML, generateJSON, getSchema } from "@skriva/core";
+import {
+  createFontStrikeoutStyle,
+  createStandardFontMetrics,
+  MissingFontFaceError,
+  type SkrivaFont,
+} from "@skriva/font";
+import {
+  createMonospaceTextMeasurer,
+  layoutDocument,
+  type LayoutExtension,
+  type LayoutNode,
+  type LayoutResult,
+} from "@skriva/layout";
+import { createRenderDocument, type TextOutlineFont } from "@skriva/renderer";
+import { GapCursor as ProseMirrorGapCursor } from "@tiptap/pm/gapcursor";
 import { expect, test } from "vite-plus/test";
 import { applyEditorKeymap, type EditorKeymapOptions } from "../react/keymap.ts";
 import {
@@ -21,6 +32,7 @@ import {
   deleteCurrentTable,
   deleteCurrentTableColumn,
   deleteCurrentTableRow,
+  sanitizeTiptapJson,
   ensureParagraphAfterCurrentTable,
   getSelectedText,
   getSelectedContent,
@@ -29,10 +41,13 @@ import {
   applyKeyboardIntent,
   applyEditorControllerAction,
   applyTextStyleToSelection,
-  createEditorSession,
+  createPlainTextClipboardAdapter,
+  createProjectSurfaceLineSelection,
+  createProjectSurfaceSelection,
+  createProjectSurfaceWordSelection,
   createEditorRenderResolveTextStyle,
+  createSkrivaSurfaceAdapter,
   insertAt,
-  insertTextInEditorSession,
   insertEditorContent,
   insertPageBreakAtDocumentEnd,
   insertTableColumnAfter,
@@ -50,12 +65,11 @@ import {
   moveSelectionVertically,
   parseEditorHtml,
   pointToEditorSelection,
+  normalizeTiptapJson,
   runEditorCommand,
   selectAllDocument,
   selectLineAtPoint,
   selectWordAtPoint,
-  setEditorSessionTextStyle,
-  updateEditorSessionSelection,
   setCurrentTextBlockType,
   setFontFamily,
   setLineHeight,
@@ -65,14 +79,12 @@ import {
   trimTrailingInlineWhitespaceSelection,
   toggleBold,
   toggleCode,
-  toggleEditorSessionMark,
   toggleHighlight,
   toggleItalic,
   toggleStrike,
   toggleSubscript,
   toggleSuperscript,
   toggleUnderline,
-  undoEditorSession,
   createEditorParityDocument,
   createEditorCanvasTextPaint,
   createEditorPdfOutlineText,
@@ -80,12 +92,18 @@ import {
   createEditorRenderMeasureText,
   createEditorRenderTextMeasurer,
   createEditorTextStyleResolver,
+  createSkrivaHeadlessRenderModel,
+  inspectSkrivaHeadlessRenderModel,
   defaultEditorExtensions,
   editorCodeFontId,
   editorHeadingTextStyleAttrs,
+  pageBreakSpacerHeightForRemainingPage,
+  proseMirrorPositionToSurfacePoint,
+  proseMirrorSelectionToSurfaceSelection,
   selectedRenderPageIndex,
+  surfacePointToProseMirrorPosition,
   type EditorSelection,
-  type EditorJson,
+  type JSONContent,
   type EditorRenderProfileOptions,
   type EditorRenderLineDocument,
 } from "../src/index.ts";
@@ -96,7 +114,7 @@ function fixedWidthMeasureText(text: string) {
   return text.length * 10;
 }
 
-function testFont(overrides: Partial<VasaFont>): VasaFont {
+function testFont(overrides: Partial<SkrivaFont>): SkrivaFont {
   return {
     id: "inter-400",
     family: "Inter",
@@ -199,7 +217,7 @@ function outlineFontWithAdvanceAndRightOverhang(
   };
 }
 
-function testOutlineFont(): VasaFont {
+function testOutlineFont(overrides: Partial<SkrivaFont> = {}): SkrivaFont {
   const family = "Parity";
   const metrics = createStandardFontMetrics({ family });
 
@@ -215,13 +233,15 @@ function testOutlineFont(): VasaFont {
       outlineFont: parityOutlineFont,
     },
     outlineFont: parityOutlineFont,
+    ...overrides,
   });
 }
 
-function webGlParityScene(doc: EditorJson) {
+function outlineParityScene(doc: JSONContent) {
   const font = testOutlineFont();
+  const bold = testOutlineFont({ id: "parity-700", weight: "700" });
   const profile = {
-    fonts: [font],
+    fonts: [font, bold],
     defaultFontId: font.id,
     fallbackFont: font,
     fontSize: 16,
@@ -238,8 +258,514 @@ function webGlParityScene(doc: EditorJson) {
     createRenderDocument,
   });
 
-  return buildCanvasScene(contract.renderDocument, { text: contract.canvasTextPaint });
+  return Scene(contract.renderDocument, { text: contract.canvasTextPaint });
 }
+
+test("maps Skriva surface points to ProseMirror text positions and back", () => {
+  const schema = getSchema(createBarebonesEditorExtensions());
+  const doc = schema.nodeFromJSON({
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Hello" }] },
+      { type: "paragraph", content: [{ type: "text", text: "World" }] },
+    ],
+  });
+
+  expect(surfacePointToProseMirrorPosition(doc, { path: [0, 0], offset: 2 })).toBe(3);
+  expect(proseMirrorPositionToSurfacePoint(doc, 3)).toEqual({ path: [0, 0], offset: 2 });
+  expect(surfacePointToProseMirrorPosition(doc, { path: [1, 0], offset: 4 })).toBe(12);
+  expect(proseMirrorPositionToSurfacePoint(doc, 12)).toEqual({ path: [1, 0], offset: 4 });
+});
+
+test("maps empty ProseMirror text blocks to stable surface text points", () => {
+  const schema = getSchema(createBarebonesEditorExtensions());
+  const doc = schema.nodeFromJSON({
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Hello" }] },
+      { type: "paragraph" },
+    ],
+  });
+
+  expect(proseMirrorPositionToSurfacePoint(doc, 8)).toEqual({ path: [1, 0], offset: 0 });
+  expect(surfacePointToProseMirrorPosition(doc, { path: [1, 0], offset: 0 })).toBe(8);
+});
+
+test("maps table boundary surface points to ProseMirror gap cursor positions", () => {
+  const schema = getSchema(
+    defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+  );
+  const doc = schema.nodeFromJSON(tableBetweenParagraphsDoc());
+
+  const beforeTable = surfacePointToProseMirrorPosition(doc, { path: [1], offset: 0 });
+  const afterTable = surfacePointToProseMirrorPosition(doc, { path: [1], offset: 1 });
+
+  expect(beforeTable).toBe(8);
+  expect(afterTable).toBeGreaterThan(beforeTable ?? 0);
+  expect(proseMirrorPositionToSurfacePoint(doc, beforeTable ?? 0)).toEqual({
+    path: [1],
+    offset: 0,
+  });
+  expect(proseMirrorPositionToSurfacePoint(doc, afterTable ?? 0)).toEqual({
+    path: [1],
+    offset: 1,
+  });
+});
+
+test("keeps table boundary selections when projecting through the Tiptap surface adapter", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: tableBetweenParagraphsDoc(),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [1], offset: 0 })).toBe(true);
+  expect(editor.state.selection).toBeInstanceOf(ProseMirrorGapCursor);
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1],
+    offset: 0,
+  });
+
+  expect(adapter.placeSelectionAt({ path: [1], offset: 1 })).toBe(true);
+  expect(editor.state.selection).toBeInstanceOf(ProseMirrorGapCursor);
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1],
+    offset: 1,
+  });
+
+  editor.destroy();
+});
+
+test("moves horizontally past table boundary selections through the Tiptap surface adapter", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: tableBetweenParagraphsDoc(),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [1], offset: 0 })).toBe(true);
+  const beforeTable = proseMirrorSelectionToSurfaceSelection(editor.state.selection);
+  expect(beforeTable).toEqual({ path: [1], offset: 0 });
+
+  const afterTable = moveSelection(
+    normalizeTiptapJson(editor.getJSON() as JSONContent),
+    beforeTable ?? { path: [0, 0], offset: 0 },
+    "right",
+  );
+  expect(adapter.placeSelectionAt(afterTable)).toBe(true);
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1],
+    offset: 1,
+  });
+
+  const afterParagraph = moveSelection(
+    normalizeTiptapJson(editor.getJSON() as JSONContent),
+    proseMirrorSelectionToSurfaceSelection(editor.state.selection) ?? { path: [0, 0], offset: 0 },
+    "right",
+  );
+  expect(adapter.placeSelectionAt(afterParagraph)).toBe(true);
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [2, 0],
+    offset: 0,
+  });
+
+  editor.destroy();
+});
+
+test("enter at a terminal table gap cursor creates an editable paragraph below it", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorTableDoc(),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0], offset: 1 })).toBe(true);
+  expect(editor.state.selection).toBeInstanceOf(ProseMirrorGapCursor);
+  expect(adapter.splitBlock()).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent).content?.at(-1)).toEqual({
+    type: "paragraph",
+    attrs: { pageSpacerHeight: null },
+    content: [{ type: "text", text: "" }],
+  });
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1, 0],
+    offset: 0,
+  });
+
+  editor.destroy();
+});
+
+test("typing at a terminal table gap cursor creates text below it", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorTableDoc(),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0], offset: 1 })).toBe(true);
+  expect(adapter.insertText("x")).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent).content?.at(-1)).toEqual({
+    type: "paragraph",
+    attrs: { pageSpacerHeight: null },
+    content: [{ type: "text", text: "x" }],
+  });
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1, 0],
+    offset: 1,
+  });
+
+  editor.destroy();
+});
+
+test("maps the Tiptap caret after splitting into an empty paragraph", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Hello"),
+  });
+
+  editor.commands.setTextSelection(6);
+  editor.commands.splitBlock();
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Hello" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "" }],
+      },
+    ],
+  });
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1, 0],
+    offset: 0,
+  });
+  editor.destroy();
+});
+
+test("keeps the Tiptap caret editable after typing into a split paragraph", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Hello"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  editor.commands.setTextSelection(6);
+  expect(editor.commands.splitBlock()).toBe(true);
+  expect(editor.commands.insertContent("x")).toBe(true);
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1, 0],
+    offset: 1,
+  });
+  expect(adapter.deleteBackward()).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Hello" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "" }],
+      },
+    ],
+  });
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [1, 0],
+    offset: 0,
+  });
+  editor.destroy();
+});
+
+test("deletes adjacent to the placed surface caret, not the document end", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("abcdef"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: 3 })).toBe(true);
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [0, 0],
+    offset: 3,
+  });
+  expect(adapter.deleteBackward()).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "abdef" }],
+      },
+    ],
+  });
+  expect(proseMirrorSelectionToSurfaceSelection(editor.state.selection)).toEqual({
+    path: [0, 0],
+    offset: 2,
+  });
+  editor.destroy();
+});
+
+test("inserts page breaks through the paragraph Tiptap command", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Intro"),
+  });
+
+  const commands = editor.commands as typeof editor.commands & {
+    insertPageBreak: (options: { spacerHeight: number }) => boolean;
+  };
+
+  expect(commands.insertPageBreak({ spacerHeight: 120 })).toBe(true);
+  expect(editor.getJSON()).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Intro" }],
+      },
+      { type: "paragraph", attrs: { pageSpacerHeight: 120 } },
+      { type: "paragraph", attrs: { pageSpacerHeight: null } },
+    ],
+  });
+  expect(editor.state.selection.$from.index(0)).toBe(2);
+  editor.destroy();
+});
+
+test("headless render model owns layout, scene, canvas, and PDF adapter collection", () => {
+  const font = testOutlineFont();
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const model = createSkrivaHeadlessRenderModel({
+    document: {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Hello v1" }] }],
+    },
+    page: { width: 240, height: 240, margin: 20 },
+    profile,
+  });
+  const scene = model.createCanvasScene({ pageGap: 12 });
+  const pdf = model.renderPdf({ defaultTextFill: "#111111", textMode: "embedded" });
+  const inspection = inspectSkrivaHeadlessRenderModel(model);
+
+  expect(inspection.layoutTree.children).toHaveLength(1);
+  expect(inspection.documentSceneGraph.pages[0]?.nodes[0]?.kind).toBe("box");
+  expect(canvasTextLines(scene).map((line) => line.text)).toEqual(["Hello v1"]);
+  expect(pdf.commands.some((command: { type: string }) => command.type === "text")).toBe(true);
+});
+
+test("headless render model can derive from a Tiptap logic layer handle", () => {
+  const font = testOutlineFont();
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const logicLayer = {
+    getJSON: () => ({
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "From Tiptap" }] }],
+    }),
+  };
+  const model = createSkrivaHeadlessRenderModel({
+    logicLayer,
+    page: { width: 240, height: 240, margin: 20 },
+    profile,
+  });
+
+  expect(model.sourceDocument).toEqual(logicLayer.getJSON());
+  expect(canvasTextLines(model.createCanvasScene()).map((line) => line.text)).toEqual([
+    "From Tiptap",
+  ]);
+});
+
+test("headless render model reports missing visual coverage diagnostics", () => {
+  const font = testOutlineFont();
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const reported: unknown[] = [];
+  const model = createSkrivaHeadlessRenderModel({
+    document: {
+      type: "doc",
+      content: [{ type: "unsupportedWidget", content: [{ type: "text", text: "Widget" }] }],
+    },
+    page: { width: 240, height: 240, margin: 20 },
+    profile,
+    onDiagnostic: (diagnostic) => reported.push(diagnostic),
+  });
+
+  expect(model.diagnostics).toEqual([
+    expect.objectContaining({
+      code: "unsupported-node",
+      schemaName: "unsupportedWidget",
+      path: "0",
+    }),
+  ]);
+  expect(reported).toHaveLength(1);
+});
+
+test("headless render model reports missing PDF coverage for custom scene nodes", () => {
+  const font = testOutlineFont();
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const widgetLayout = {
+    name: "widget",
+    match: (node): node is LayoutNode & { type: "widget" } =>
+      (node as { type: string }).type === "widget",
+    measure: () => ({ width: 24, height: 12 }),
+  } satisfies LayoutExtension;
+  const reported: unknown[] = [];
+  const model = createSkrivaHeadlessRenderModel({
+    document: {
+      type: "doc",
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Widget" }] }],
+    },
+    page: { width: 240, height: 240, margin: 20 },
+    profile,
+    enrichments: [{ name: "widget", layout: widgetLayout }],
+    extraChildren: [{ type: "widget" } as never],
+    onDiagnostic: (diagnostic) => reported.push(diagnostic),
+  });
+
+  expect(model.diagnostics).toContainEqual(
+    expect.objectContaining({
+      code: "missing-pdf-coverage",
+      sceneNodeName: "widget",
+      path: "pages.0.nodes.1",
+    }),
+  );
+  expect(reported).toContainEqual(
+    expect.objectContaining({
+      code: "missing-pdf-coverage",
+      sceneNodeName: "widget",
+    }),
+  );
+  expect(() => model.renderPdf()).toThrow(
+    'No native PDF coverage is registered for scene node "widget".',
+  );
+});
+
+test("headless render model can promote visual diagnostics to errors", () => {
+  const font = testOutlineFont();
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+
+  expect(() =>
+    createSkrivaHeadlessRenderModel({
+      document: {
+        type: "doc",
+        content: [
+          {
+            type: "paragraph",
+            content: [{ type: "text", text: "Mystery", marks: [{ type: "mystery" }] }],
+          },
+        ],
+      },
+      page: { width: 240, height: 240, margin: 20 },
+      profile,
+      diagnosticPolicy: "error",
+    }),
+  ).toThrow('No Skriva visual coverage is registered for mark "mystery".');
+});
 
 function canvasTextLines(scene: CanvasScene) {
   return scene.pages.flatMap((page) => flattenCanvasTextLines(page.children));
@@ -277,12 +803,12 @@ function renderLine(text: string, x: number, y: number, start?: number) {
 }
 
 test("converts a doc with one paragraph and text into a BoxNode", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
         type: "paragraph",
-        content: [{ type: "text", text: "Hello, Vasa." }],
+        content: [{ type: "text", text: "Hello, Text." }],
       },
     ],
   };
@@ -295,14 +821,14 @@ test("converts a doc with one paragraph and text into a BoxNode", () => {
         id: "0",
         type: "box",
         style: { flexDirection: "column" },
-        children: [{ id: "0.0", type: "text", text: "Hello, Vasa." }],
+        children: [{ id: "0.0", type: "text", text: "Hello, Text." }],
       },
     ],
   });
 });
 
 test("joins adjacent text children deterministically", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -325,7 +851,7 @@ test("joins adjacent text children deterministically", () => {
 });
 
 test("preserves styled text runs in layout conversion", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -334,7 +860,7 @@ test("preserves styled text runs in layout conversion", () => {
           { type: "text", text: "Hello " },
           {
             type: "text",
-            text: "Vasa",
+            text: "Text",
             marks: [{ type: "textStyle", attrs: { fontId: "serif" } }, { type: "bold" }],
           },
         ],
@@ -360,7 +886,7 @@ test("preserves styled text runs in layout conversion", () => {
           { id: "0.0", text: "Hello ", style: { font: "16px sans-serif" } },
           {
             id: "0.1",
-            text: "Vasa",
+            text: "Text",
             style: { font: "700 18px serif", lineHeight: 24 },
           },
         ],
@@ -371,7 +897,7 @@ test("preserves styled text runs in layout conversion", () => {
 });
 
 test("renders code marks without changing the current font", () => {
-  const defaultFont: VasaFont = {
+  const defaultFont: SkrivaFont = {
     id: "arimo",
     family: "Arimo",
     displayName: "Arimo",
@@ -381,7 +907,7 @@ test("renders code marks without changing the current font", () => {
     fallbackFamilies: ["Arial", "sans-serif"],
     data: { kind: "native" },
   };
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -417,12 +943,12 @@ test("renders code marks without changing the current font", () => {
 test("aligns code font baselines with the default editor font", () => {
   const defaultFont = testFont({
     id: "liberation-sans",
-    family: "Vasa Liberation Sans",
-    cssFamily: '"Vasa Liberation Sans", Arial, sans-serif',
+    family: "Skriva Liberation Sans",
+    cssFamily: '"Skriva Liberation Sans", Arial, sans-serif',
     data: {
       kind: "native",
       metrics: createStandardFontMetrics({
-        family: "Vasa Liberation Sans",
+        family: "Skriva Liberation Sans",
         fallbackFamilies: ["Arial", "sans-serif"],
       }),
     },
@@ -440,7 +966,7 @@ test("aligns code font baselines with the default editor font", () => {
       }),
     },
   });
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -493,12 +1019,12 @@ test("aligns code font baselines with the default editor font", () => {
 
 test("uses real bold font faces without faux outline emboldening", () => {
   const regularOutline = { id: "regular-outline" } as unknown as NonNullable<
-    VasaFont["outlineFont"]
+    SkrivaFont["outlineFont"]
   >;
-  const boldOutline = { id: "bold-outline" } as unknown as NonNullable<VasaFont["outlineFont"]>;
+  const boldOutline = { id: "bold-outline" } as unknown as NonNullable<SkrivaFont["outlineFont"]>;
   const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
   const bold = testFont({ id: "inter-700", weight: "700", outlineFont: boldOutline });
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -526,14 +1052,20 @@ test("uses real bold font faces without faux outline emboldening", () => {
   ).toMatchObject({
     font: "normal 700 16px Inter, Arial, sans-serif",
     outlineFont: boldOutline,
-    embolden: undefined,
   });
-  expect(
-    createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0),
-  ).toMatchObject({
+  const canvasPaint = createEditorCanvasTextPaint(
+    doc,
+    profile,
+    { lines: [{ sourceId: "0.0" }] },
+    0,
+  );
+  const pdfPaint = createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0);
+
+  expect(canvasPaint).not.toHaveProperty("embolden");
+  expect(pdfPaint).toMatchObject({
     font: boldOutline,
-    embolden: undefined,
   });
+  expect(pdfPaint).not.toHaveProperty("embolden");
 });
 
 test("uses the resolved font face metrics for strike geometry", () => {
@@ -583,12 +1115,12 @@ test("uses the resolved font face metrics for strike geometry", () => {
   expect(style.textDecorationOffset).not.toBeCloseTo(regularStrikeout.offset, 5);
 });
 
-test("faux emboldens only when no bold face is available", () => {
+test("throws when bold is requested without a real bold face", () => {
   const regularOutline = { id: "regular-outline" } as unknown as NonNullable<
-    VasaFont["outlineFont"]
+    SkrivaFont["outlineFont"]
   >;
   const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -611,13 +1143,9 @@ test("faux emboldens only when no bold face is available", () => {
     lineHeight: 16,
   };
 
-  expect(
+  expect(() =>
     createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0),
-  ).toMatchObject({
-    font: "normal 700 16px Inter, Arial, sans-serif",
-    outlineFont: regularOutline,
-    embolden: 1.12,
-  });
+  ).toThrow(MissingFontFaceError);
 });
 
 test("uses real italic font faces for layout and paint without faux skew", () => {
@@ -630,7 +1158,7 @@ test("uses real italic font faces for layout and paint without faux skew", () =>
     style: "italic",
     outlineFont: italicOutline,
   });
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -656,20 +1184,26 @@ test("uses real italic font faces for layout and paint without faux skew", () =>
   ).toMatchObject({
     font: "italic 400 10px Inter, Arial, sans-serif",
     outlineFont: italicOutline,
-    skewX: undefined,
   });
-  expect(
-    createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0),
-  ).toMatchObject({
+  const canvasPaint = createEditorCanvasTextPaint(
+    doc,
+    profile,
+    { lines: [{ sourceId: "0.0" }] },
+    0,
+  );
+  const pdfPaint = createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0);
+
+  expect(canvasPaint).not.toHaveProperty("skewX");
+  expect(pdfPaint).toMatchObject({
     font: italicOutline,
-    skewX: undefined,
   });
+  expect(pdfPaint).not.toHaveProperty("skewX");
 });
 
-test("applies faux italic skew only when the italic face is synthetic", () => {
+test("throws when italic is requested without a real italic face", () => {
   const regularOutline = outlineFontWithAdvance(1000);
   const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -687,27 +1221,20 @@ test("applies faux italic skew only when the italic face is synthetic", () => {
     italicSkewX: 0.25,
   };
 
-  expect(
+  expect(() =>
     createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0),
-  ).toMatchObject({
-    font: "italic 400 10px Inter, Arial, sans-serif",
-    outlineFont: regularOutline,
-    skewX: 0.25,
-  });
-  expect(
+  ).toThrow(MissingFontFaceError);
+  expect(() =>
     createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0),
-  ).toMatchObject({
-    font: regularOutline,
-    skewX: 0.25,
-  });
+  ).toThrow(MissingFontFaceError);
 });
 
-test("uses bold face plus skew for bold italic when italic bold face is unavailable", () => {
+test("throws when bold italic is requested without a real bold italic face", () => {
   const regularOutline = outlineFontWithAdvance(1000);
   const boldOutline = outlineFontWithAdvance(1000);
   const regular = testFont({ id: "inter-400", weight: "400", outlineFont: regularOutline });
   const bold = testFont({ id: "inter-700", weight: "700", outlineFont: boldOutline });
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -730,14 +1257,9 @@ test("uses bold face plus skew for bold italic when italic bold face is unavaila
     lineHeight: 12,
     italicSkewX: 0.25,
   };
-  const paint = createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0);
-
-  expect(paint).toMatchObject({
-    font: "italic 700 10px Inter, Arial, sans-serif",
-    outlineFont: boldOutline,
-    embolden: undefined,
-    skewX: 0.25,
-  });
+  expect(() =>
+    createEditorCanvasTextPaint(doc, profile, { lines: [{ sourceId: "0.0" }] }, 0),
+  ).toThrow(MissingFontFaceError);
 });
 
 test("uses real bold italic font faces without synthetic skew or emboldening", () => {
@@ -752,7 +1274,7 @@ test("uses real bold italic font faces without synthetic skew or emboldening", (
     style: "italic",
     outlineFont: boldItalicOutline,
   });
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -780,19 +1302,18 @@ test("uses real bold italic font faces without synthetic skew or emboldening", (
   expect(paint).toMatchObject({
     font: "italic 700 10px Inter, Arial, sans-serif",
     outlineFont: boldItalicOutline,
-    embolden: undefined,
-    skewX: undefined,
   });
-  expect(
-    createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0),
-  ).toMatchObject({
+  expect(paint).not.toHaveProperty("embolden");
+  expect(paint).not.toHaveProperty("skewX");
+  const pdfPaint = createEditorPdfOutlineText(doc, profile, { sourceId: "0.0", lines: [{}] }, 0);
+  expect(pdfPaint).toMatchObject({
     font: boldItalicOutline,
-    embolden: undefined,
-    skewX: undefined,
   });
+  expect(pdfPaint).not.toHaveProperty("embolden");
+  expect(pdfPaint).not.toHaveProperty("skewX");
 });
 
-test("measures synthetic bold italic with the closest bold outline face", () => {
+test("throws when measuring text with an unresolved requested font face", () => {
   const regular = testFont({
     id: "inter-400",
     weight: "400",
@@ -811,7 +1332,9 @@ test("measures synthetic bold italic with the closest bold outline face", () => 
     lineHeight: 12,
   });
 
-  expect(measureText("B", "italic 700 10px Inter, Arial, sans-serif")).toBe(20);
+  expect(() => measureText("B", "italic 700 10px Inter, Arial, sans-serif")).toThrow(
+    MissingFontFaceError,
+  );
 });
 
 test("measures positive outline ink overhang so italic runs do not cover following runs", () => {
@@ -821,8 +1344,15 @@ test("measures positive outline ink overhang so italic runs do not cover followi
     weight: "400",
     outlineFont: outlineFontWithAdvanceAndRightOverhang(1000, 500),
   });
+  const italic = testFont({
+    id: "arimo-400-italic",
+    family: "Arimo",
+    weight: "400",
+    style: "italic",
+    outlineFont: outlineFontWithAdvanceAndRightOverhang(1000, 500),
+  });
   const measureText = createEditorRenderMeasureText({
-    fonts: [regular],
+    fonts: [regular, italic],
     defaultFontId: regular.id,
     fallbackFont: regular,
     fontSize: 10,
@@ -849,9 +1379,15 @@ test("measures the primary CSS font family before fallback families", () => {
     weight: "700",
     outlineFont: outlineFontWithAdvance(2000),
   });
+  const boldItalic = testFont({
+    id: "inter-700-italic",
+    weight: "700",
+    style: "italic",
+    outlineFont: outlineFontWithAdvance(2000),
+  });
   const measureText = createEditorRenderMeasureText(
     {
-      fonts: [arial, regular, bold],
+      fonts: [arial, regular, bold, boldItalic],
       defaultFontId: regular.id,
       fallbackFont: arial,
       fontSize: 10,
@@ -863,7 +1399,7 @@ test("measures the primary CSS font family before fallback families", () => {
   expect(measureText("A", "normal 400 10px Inter, Arial, sans-serif")).toBe(10);
   expect(
     createEditorRenderMeasureText({
-      fonts: [arial, regular, bold],
+      fonts: [arial, regular, bold, boldItalic],
       defaultFontId: regular.id,
       fallbackFont: arial,
       fontSize: 10,
@@ -890,7 +1426,7 @@ test("lets stylesheets extend layout and renderer text styles", () => {
       },
     ],
   } satisfies EditorRenderProfileOptions;
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -921,7 +1457,7 @@ test("does not shrink script text again during canvas and PDF paint resolution",
     lineHeight: 20,
     scriptScale: 0.5,
   };
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -960,7 +1496,7 @@ test("uses resolved italic faces when wrapping mixed inline text", () => {
     whiteSpace: "pre-wrap" as const,
     wordBreak: "normal" as const,
   };
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -990,7 +1526,7 @@ test("uses resolved italic faces when wrapping mixed inline text", () => {
 });
 
 test("converts table documents into row and cell layout containers", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -1123,7 +1659,7 @@ test("inserts and deletes table columns around the selected cell", () => {
 });
 
 test("deletes the current table block", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Before" }] },
@@ -1162,6 +1698,29 @@ test("creates an editable paragraph after a terminal table", () => {
   expect(isSelectionPointAtCurrentTableEnd(doc, selection, selection)).toBe(true);
 });
 
+test("serializes internal empty text nodes as valid ProseMirror content", () => {
+  const doc = {
+    type: "doc",
+    content: [
+      ...(editorTableDoc().content ?? []),
+      { type: "paragraph", content: [{ type: "text", text: "" }] },
+    ],
+  } satisfies JSONContent;
+  const tiptapDoc = sanitizeTiptapJson(doc);
+  const schema = getSchema(
+    defaultEditorExtensions.flatMap((extension) =>
+      extension.tiptap === undefined ? [] : [extension.tiptap],
+    ),
+  );
+
+  expect(tiptapDoc.content?.at(-1)).toEqual({ type: "paragraph" });
+  expect(() => schema.nodeFromJSON(tiptapDoc)).not.toThrow();
+  expect(normalizeTiptapJson(tiptapDoc).content?.at(-1)).toEqual({
+    type: "paragraph",
+    content: [{ type: "text", text: "" }],
+  });
+});
+
 test("enter at the gap cursor below a table inserts a paragraph below it", () => {
   const doc = editorTableDoc();
 
@@ -1178,7 +1737,7 @@ test("enter at the gap cursor below a table inserts a paragraph below it", () =>
 });
 
 test("uses the next editable block when exiting a table with content below", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       ...(editorTableDoc().content ?? []),
@@ -1194,7 +1753,7 @@ test("uses the next editable block when exiting a table with content below", () 
 
 test("applies text style attributes to a same-node selection", () => {
   const styled = applyTextStyleToSelection(
-    editorDoc("Hello Vasa"),
+    editorDoc("Hello Text"),
     {
       path: [0, 0],
       offset: 10,
@@ -1216,7 +1775,7 @@ test("applies text style attributes to a same-node selection", () => {
           { type: "text", text: "Hello " },
           {
             type: "text",
-            text: "Vasa",
+            text: "Text",
             marks: [
               { type: "textStyle", attrs: { fontId: "serif", fontSize: 18, fontWeight: "700" } },
             ],
@@ -1234,7 +1793,7 @@ test("applies text style attributes to a same-node selection", () => {
 
 test("keeps a styled character selection active for additional style changes", () => {
   const first = applyTextStyleToSelection(
-    editorDoc("Hello Vasa"),
+    editorDoc("Hello Text"),
     {
       path: [0, 0],
       offset: 10,
@@ -1254,7 +1813,7 @@ test("keeps a styled character selection active for additional style changes", (
           { type: "text", text: "Hello " },
           {
             type: "text",
-            text: "Vasa",
+            text: "Text",
             marks: [
               { type: "textStyle", attrs: { fontId: "serif", fontSize: 18, fontWeight: "700" } },
             ],
@@ -1276,7 +1835,7 @@ test("toggles bold as a Tiptap-style mark", () => {
     offset: 10,
     anchor: { path: [0, 0], offset: 6 },
   };
-  const bold = toggleBold(editorDoc("Hello Vasa"), selection);
+  const bold = toggleBold(editorDoc("Hello Text"), selection);
   const unbold = toggleBold(bold.doc, bold.selection);
 
   expect(bold.doc).toEqual({
@@ -1286,12 +1845,12 @@ test("toggles bold as a Tiptap-style mark", () => {
         type: "paragraph",
         content: [
           { type: "text", text: "Hello " },
-          { type: "text", text: "Vasa", marks: [{ type: "bold" }] },
+          { type: "text", text: "Text", marks: [{ type: "bold" }] },
         ],
       },
     ],
   });
-  expect(unbold.doc).toEqual(editorDoc("Hello Vasa"));
+  expect(unbold.doc).toEqual(editorDoc("Hello Text"));
 });
 
 test("toggles DOM-style inline marks independently", () => {
@@ -1300,11 +1859,11 @@ test("toggles DOM-style inline marks independently", () => {
     offset: 10,
     anchor: { path: [0, 0], offset: 6 },
   };
-  const italic = toggleItalic(editorDoc("Hello Vasa"), selection);
-  const underline = toggleUnderline(editorDoc("Hello Vasa"), selection);
-  const strike = toggleStrike(editorDoc("Hello Vasa"), selection);
-  const code = toggleCode(editorDoc("Hello Vasa"), selection);
-  const highlight = toggleHighlight(editorDoc("Hello Vasa"), selection, { color: "#fef08a" });
+  const italic = toggleItalic(editorDoc("Hello Text"), selection);
+  const underline = toggleUnderline(editorDoc("Hello Text"), selection);
+  const strike = toggleStrike(editorDoc("Hello Text"), selection);
+  const code = toggleCode(editorDoc("Hello Text"), selection);
+  const highlight = toggleHighlight(editorDoc("Hello Text"), selection, { color: "#fef08a" });
 
   expect(italic.doc.content?.[0]?.content?.[1]?.marks).toEqual([{ type: "italic" }]);
   expect(underline.doc.content?.[0]?.content?.[1]?.marks).toEqual([{ type: "underline" }]);
@@ -1330,7 +1889,7 @@ test("parses browser HTML marks into the shared editor JSON model", () => {
       "</p>",
     ].join(""),
     editorTiptapExtensions(),
-  ) as EditorJson;
+  ) as JSONContent;
   const content = json.content?.[0]?.content ?? [];
 
   expect(content.find((node) => node.text === "bold")?.marks).toEqual([{ type: "bold" }]);
@@ -1407,15 +1966,15 @@ test("combines text-style, color, and script marks in one inline run", () => {
     offset: 10,
     anchor: { path: [0, 0], offset: 6 },
   };
-  const bold = toggleBold(editorDoc("Hello Vasa"), selection);
+  const bold = toggleBold(editorDoc("Hello Text"), selection);
   const italic = toggleItalic(bold.doc, bold.selection);
   const colored = setColor(italic.doc, italic.selection, "#2563eb");
   const superscript = toggleSuperscript(colored.doc, colored.selection);
-  const subscript = toggleSubscript(editorDoc("Hello Vasa"), selection);
+  const subscript = toggleSubscript(editorDoc("Hello Text"), selection);
 
   expect(colored.doc.content?.[0]?.content?.[1]).toEqual({
     type: "text",
-    text: "Vasa",
+    text: "Text",
     marks: [
       { type: "bold" },
       { type: "italic" },
@@ -1429,7 +1988,7 @@ test("combines text-style, color, and script marks in one inline run", () => {
 });
 
 test("reports mark active only when all selected characters have the mark", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -1467,7 +2026,7 @@ test("reports mark active only when all selected characters have the mark", () =
 });
 
 test("reports mark active for selected marked fragments after preceding text", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -1526,95 +2085,8 @@ test("inserts pending styled characters at a collapsed selection", () => {
   expect(inserted.selection).toEqual({ path: [0, 1], offset: 1 });
 });
 
-test("editor sessions own pending marks, history, and undo", () => {
-  const session = createEditorSession({
-    doc: editorDoc("Hello"),
-    selection: { path: [0, 0], offset: 5 },
-  });
-  const withBold = toggleEditorSessionMark(session, { type: "bold" }, toggleBold);
-  const inserted = insertTextInEditorSession(withBold, "!");
-  const undone = undoEditorSession(inserted);
-
-  expect(withBold.storedMarks).toEqual([{ type: "bold" }]);
-  expect(inserted.doc.content?.[0]?.content?.[1]).toEqual({
-    type: "text",
-    text: "!",
-    marks: [{ type: "bold" }],
-  });
-  expect(undone.doc).toEqual(editorDoc("Hello"));
-});
-
-test("editor sessions insert unmarked text after disabling script at the cursor", () => {
-  const superscript = createEditorSession({
-    doc: {
-      type: "doc",
-      content: [
-        {
-          type: "paragraph",
-          content: [{ type: "text", text: "2", marks: [{ type: "superscript" }] }],
-        },
-      ],
-    },
-    selection: { path: [0, 0], offset: 1 },
-    storedMarks: [{ type: "superscript" }],
-  });
-  const subscript = createEditorSession({
-    doc: {
-      type: "doc",
-      content: [
-        {
-          type: "paragraph",
-          content: [{ type: "text", text: "2", marks: [{ type: "subscript" }] }],
-        },
-      ],
-    },
-    selection: { path: [0, 0], offset: 1 },
-    storedMarks: [{ type: "subscript" }],
-  });
-
-  const afterSuperscript = insertTextInEditorSession(
-    toggleEditorSessionMark(superscript, { type: "superscript" }, toggleSuperscript),
-    "x",
-  );
-  const afterSubscript = insertTextInEditorSession(
-    toggleEditorSessionMark(subscript, { type: "subscript" }, toggleSubscript),
-    "x",
-  );
-
-  expect(afterSuperscript.doc.content?.[0]?.content).toEqual([
-    { type: "text", text: "2", marks: [{ type: "superscript" }] },
-    { type: "text", text: "x" },
-  ]);
-  expect(afterSubscript.doc.content?.[0]?.content).toEqual([
-    { type: "text", text: "2", marks: [{ type: "subscript" }] },
-    { type: "text", text: "x" },
-  ]);
-});
-
-test("editor sessions apply text style to future or selected characters", () => {
-  const collapsed = createEditorSession({
-    doc: editorDoc("Hello"),
-    selection: { path: [0, 0], offset: 5 },
-  });
-  const pending = setEditorSessionTextStyle(collapsed, { color: "#2563eb" }, (doc, selection) =>
-    setColor(doc, selection, "#2563eb"),
-  );
-  const selected = createEditorSession({
-    doc: editorDoc("Hello"),
-    selection: { path: [0, 0], offset: 5, anchor: { path: [0, 0], offset: 0 } },
-  });
-  const colored = setEditorSessionTextStyle(selected, { color: "#2563eb" }, (doc, selection) =>
-    setColor(doc, selection, "#2563eb"),
-  );
-
-  expect(pending.storedMarks).toEqual([{ type: "textStyle", attrs: { color: "#2563eb" } }]);
-  expect(colored.doc.content?.[0]?.content?.[0]?.marks).toEqual([
-    { type: "textStyle", attrs: { color: "#2563eb" } },
-  ]);
-});
-
 test("reports current text font attributes from cursor marks and stored marks", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -1623,7 +2095,7 @@ test("reports current text font attributes from cursor marks and stored marks", 
           { type: "text", text: "Hello " },
           {
             type: "text",
-            text: "Vasa",
+            text: "Text",
             marks: [{ type: "textStyle", attrs: { fontId: "lora", fontSize: 22 } }],
           },
         ],
@@ -1645,8 +2117,8 @@ test("reports current text font attributes from cursor marks and stored marks", 
   });
 });
 
-test("selection changes clear pending text style toolbar state", () => {
-  const doc: EditorJson = {
+test("stored marks override current text style toolbar state", () => {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -1662,34 +2134,21 @@ test("selection changes clear pending text style toolbar state", () => {
       },
     ],
   };
-  const session = createEditorSession({
-    doc,
-    selection: { path: [0, 0], offset: 3 },
-  });
-  const pending = setEditorSessionTextStyle(
-    session,
-    { fontSize: 18, lineHeight: 1.5 },
-    (nextDoc) => ({
-      doc: nextDoc,
-      selection: session.selection,
-    }),
-  );
-  const moved = updateEditorSessionSelection(pending, { path: [0, 1], offset: 2 });
-
   expect(
-    currentEditorTextStyleAttrs(pending.doc, pending.selection, pending.storedMarks),
+    currentEditorTextStyleAttrs(doc, { path: [0, 0], offset: 3 }, [
+      { type: "textStyle", attrs: { fontSize: 18, lineHeight: 1.5 } },
+    ]),
   ).toMatchObject({
     fontId: "lora",
     fontSize: 18,
     lineHeight: 1.5,
   });
-  expect(moved.storedMarks).toEqual([]);
-  expect(currentEditorTextStyleAttrs(moved.doc, moved.selection, moved.storedMarks)).toEqual({});
+  expect(currentEditorTextStyleAttrs(doc, { path: [0, 1], offset: 2 })).toEqual({});
 });
 
 test("applies line height as a selectable text style", () => {
   const styled = setLineHeight(
-    editorDoc("Hello Vasa"),
+    editorDoc("Hello Text"),
     {
       path: [0, 0],
       offset: 10,
@@ -1775,33 +2234,97 @@ test("inserts page breaks with the current font ready for new text", () => {
   });
 });
 
+test("sizes page break spacers to fit the current page gap", () => {
+  expect(
+    pageBreakSpacerHeightForRemainingPage({ remainingHeight: 120, precedingBlockGap: 14 }),
+  ).toBe(106);
+  expect(pageBreakSpacerHeightForRemainingPage({ remainingHeight: 8, precedingBlockGap: 14 })).toBe(
+    1,
+  );
+});
+
+test("inserts one explicit page after text already soft-wraps onto a new page", () => {
+  const doc = editorDoc("alpha beta gamma delta epsilon zeta eta theta iota kappa");
+  const before = editorLayoutForPageBreakRegression(doc);
+  const remainingHeight =
+    before.pages.at(-1)!.content.y +
+    before.pages.at(-1)!.content.height -
+    lastLayoutPageContentBottomY(before.pages.at(-1)!);
+
+  const inserted = insertPageBreakAtDocumentEnd(
+    doc,
+    pageBreakSpacerHeightForRemainingPage({ remainingHeight, precedingBlockGap: 14 }),
+  );
+  const after = editorLayoutForPageBreakRegression(inserted.doc);
+
+  expect(before.pages).toHaveLength(2);
+  expect(after.pages).toHaveLength(3);
+  expect(after.pages[1]?.boxes.map((box) => box.id)).toEqual(["0", "1"]);
+  expect(after.pages[2]?.boxes.map((box) => box.id)).toEqual(["2"]);
+});
+
 test("moves a bottom empty paragraph before typing into it", () => {
-  let session = createEditorSession({
-    doc: editorDoc("Bottom"),
-    selection: { path: [0, 0], offset: "Bottom".length },
-  });
+  let doc = editorDoc("Bottom");
+  let selection: EditorSelection = { path: [0, 0], offset: "Bottom".length };
 
   for (let index = 0; index < 8; index += 1) {
-    session = {
-      ...session,
-      ...splitParagraph(session.doc, session.selection),
-    };
+    const split = splitParagraph(doc, selection);
+    doc = split.doc;
+    selection = split.selection;
   }
 
-  const emptyPageIndex = editorLayoutPageIndexForPath(session.doc, session.selection.path);
-  const typedSession = insertTextInEditorSession(session, "t");
-  const typedPageIndex = editorLayoutPageIndexForPath(
-    typedSession.doc,
-    typedSession.selection.path,
-  );
+  const emptyPageIndex = editorLayoutPageIndexForPath(doc, selection.path);
+  const typed = insertText(doc, selection, "t");
+  const typedPageIndex = editorLayoutPageIndexForPath(typed.doc, typed.selection.path);
 
   expect(emptyPageIndex).toBe(1);
   expect(typedPageIndex).toBe(emptyPageIndex);
 });
 
+test("resolves carets after splitting and deleting empty paragraphs", () => {
+  const font = testFont({ id: "arimo", family: "Arimo" });
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const render = (doc: JSONContent) =>
+    inspectSkrivaHeadlessRenderModel(
+      createSkrivaHeadlessRenderModel({
+        document: doc,
+        page: { width: 240, height: 240, margin: 20 },
+        profile,
+        paragraphStyle: { flexDirection: "column" },
+      }),
+    ).documentSceneGraph;
+  const measure = (text: string) => text.length * 8;
+  const split = splitParagraph(editorDoc("Hello"), { path: [0, 0], offset: 5 });
+
+  expect(split.selection).toEqual({ path: [1, 0], offset: 0 });
+  expect(
+    findCaretRect(render(split.doc), split.selection, measure, {
+      pageHeight: 240,
+      minLineWidth: 8,
+    }),
+  ).toEqual(expect.objectContaining({ width: 2, height: 20 }));
+
+  const deleted = deleteBackward(split.doc, split.selection);
+  expect(
+    findCaretRect(render(deleted.doc), deleted.selection, measure, {
+      pageHeight: 240,
+      minLineWidth: 8,
+    }),
+  ).toEqual(expect.objectContaining({ width: 2, height: 20 }));
+});
+
 test("sets font family through the textStyle mark like Tiptap", () => {
   const styled = setFontFamily(
-    editorDoc("Hello Vasa"),
+    editorDoc("Hello Text"),
     {
       path: [0, 0],
       offset: 10,
@@ -1819,7 +2342,7 @@ test("sets font family through the textStyle mark like Tiptap", () => {
           { type: "text", text: "Hello " },
           {
             type: "text",
-            text: "Vasa",
+            text: "Text",
             marks: [{ type: "textStyle", attrs: { fontId: "serif" } }],
           },
         ],
@@ -1831,7 +2354,7 @@ test("sets font family through the textStyle mark like Tiptap", () => {
 test("runs editor commands through the Tiptap command bridge", () => {
   const result = runEditorCommand(
     {
-      doc: editorDoc("Hello Vasa"),
+      doc: editorDoc("Hello Text"),
       selection: {
         path: [0, 0],
         offset: 10,
@@ -1849,17 +2372,17 @@ test("runs editor commands through the Tiptap command bridge", () => {
         type: "paragraph",
         content: [
           { type: "text", text: "Hello " },
-          { type: "text", text: "Vasa", marks: [{ type: "bold" }] },
+          { type: "text", text: "Text", marks: [{ type: "bold" }] },
         ],
       },
     ],
   });
 });
 
-test("runs chained Tiptap commands against Vasa selection primitives", () => {
+test("runs chained Tiptap commands against Text selection primitives", () => {
   const result = runEditorCommand(
     {
-      doc: editorDoc("Hello Vasa"),
+      doc: editorDoc("Hello Text"),
       selection: {
         path: [0, 0],
         offset: 10,
@@ -1880,7 +2403,7 @@ test("runs chained Tiptap commands against Vasa selection primitives", () => {
           { type: "text", text: "Hello " },
           {
             type: "text",
-            text: "Vasa",
+            text: "Text",
             marks: [{ type: "textStyle", attrs: { fontId: "serif" } }],
           },
         ],
@@ -1898,7 +2421,7 @@ test("applies text style attributes across adjacent text runs in a paragraph", (
           type: "paragraph",
           content: [
             { type: "text", text: "Hello " },
-            { type: "text", text: "Vasa", marks: [{ type: "bold" }] },
+            { type: "text", text: "Text", marks: [{ type: "bold" }] },
             { type: "text", text: " friend" },
           ],
         },
@@ -1922,7 +2445,7 @@ test("applies text style attributes across adjacent text runs in a paragraph", (
           { type: "text", text: "lo ", marks: [{ type: "textStyle", attrs: { fontSize: 18 } }] },
           {
             type: "text",
-            text: "Vasa",
+            text: "Text",
             marks: [{ type: "bold" }, { type: "textStyle", attrs: { fontSize: 18 } }],
           },
           { type: "text", text: " fri", marks: [{ type: "textStyle", attrs: { fontSize: 18 } }] },
@@ -1939,7 +2462,7 @@ test("applies text style attributes across adjacent text runs in a paragraph", (
 });
 
 test("renders supported nested Tiptap nodes without throwing", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -1992,7 +2515,7 @@ test("renders supported nested Tiptap nodes without throwing", () => {
 });
 
 test("renders empty headings with the heading font attributes", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [{ type: "heading", attrs: { level: 2 }, content: [] }],
   };
@@ -2022,8 +2545,8 @@ test("renders empty headings with the heading font attributes", () => {
   });
 });
 
-test("keeps underline and strikethrough in the WebGL parity geometry", () => {
-  const scene = webGlParityScene({
+test("keeps underline and strikethrough in outline parity text paint", () => {
+  const scene = outlineParityScene({
     type: "doc",
     content: [
       {
@@ -2044,26 +2567,10 @@ test("keeps underline and strikethrough in the WebGL parity geometry", () => {
   expect(lines.find((line) => line.text === "Strike")).toMatchObject({
     textDecorationLine: "line-through",
   });
-  const analysis = analyzeWebGlScene(scene);
-  const underline = analysis.decorationPrimitives.find((primitive) => primitive.text === "Under");
-  const strike = analysis.decorationPrimitives.find((primitive) => primitive.text === "Strike");
-
-  expect(underline).toMatchObject({
-    text: "Under",
-    line: "underline",
-    rect: { height: 1 },
-  });
-  expect(strike).toMatchObject({
-    text: "Strike",
-    line: "line-through",
-    rect: { height: 1 },
-  });
-  expect(underline?.rect.y).toBeGreaterThan(lines.find((line) => line.text === "Under")?.y ?? 0);
-  expect(strike?.rect.y).toBeGreaterThan(lines.find((line) => line.text === "Strike")?.y ?? 0);
 });
 
-test("keeps subscript and superscript smaller in the WebGL parity geometry", () => {
-  const scene = webGlParityScene({
+test("keeps subscript and superscript smaller in outline parity text paint", () => {
+  const scene = outlineParityScene({
     type: "doc",
     content: [
       {
@@ -2080,12 +2587,6 @@ test("keeps subscript and superscript smaller in the WebGL parity geometry", () 
   const base = lines.find((line) => line.text === "Base");
   const subscript = lines.find((line) => line.text === "Sub");
   const superscript = lines.find((line) => line.text === "Super");
-  const analysis = analyzeWebGlScene(scene);
-  const basePrimitive = analysis.textPrimitives.find((primitive) => primitive.text === "Base");
-  const subscriptPrimitive = analysis.textPrimitives.find((primitive) => primitive.text === "Sub");
-  const superscriptPrimitive = analysis.textPrimitives.find(
-    (primitive) => primitive.text === "Super",
-  );
 
   expect(fontSizeFromCanvasFont(subscript?.font ?? "")).toBeLessThan(
     fontSizeFromCanvasFont(base?.font ?? ""),
@@ -2095,14 +2596,10 @@ test("keeps subscript and superscript smaller in the WebGL parity geometry", () 
   );
   expect(subscript?.y).toBeGreaterThan(base?.y ?? 0);
   expect(superscript?.y).toBeLessThan(base?.y ?? Number.POSITIVE_INFINITY);
-  expect(subscriptPrimitive?.fontSize).toBeLessThan(basePrimitive?.fontSize ?? 0);
-  expect(superscriptPrimitive?.fontSize).toBeLessThan(basePrimitive?.fontSize ?? 0);
-  expect(subscriptPrimitive?.bounds.height).toBeLessThan(basePrimitive?.bounds.height ?? 0);
-  expect(superscriptPrimitive?.bounds.height).toBeLessThan(basePrimitive?.bounds.height ?? 0);
 });
 
-test("keeps heading text larger than body text in the WebGL parity geometry", () => {
-  const scene = webGlParityScene({
+test("keeps heading text larger than body text in outline parity text paint", () => {
+  const scene = outlineParityScene({
     type: "doc",
     content: [
       {
@@ -2119,29 +2616,21 @@ test("keeps heading text larger than body text in the WebGL parity geometry", ()
   const lines = canvasTextLines(scene);
   const heading = lines.find((line) => line.text === "Heading");
   const body = lines.find((line) => line.text === "Body");
-  const analysis = analyzeWebGlScene(scene);
-  const headingPrimitive = analysis.textPrimitives.find(
-    (primitive) => primitive.text === "Heading",
-  );
-  const bodyPrimitive = analysis.textPrimitives.find((primitive) => primitive.text === "Body");
 
   expect(fontSizeFromCanvasFont(heading?.font ?? "")).toBeGreaterThan(
     fontSizeFromCanvasFont(body?.font ?? ""),
   );
-  expect(analysis.textTriangleCount).toBeGreaterThan(0);
-  expect(headingPrimitive?.fontSize).toBeGreaterThan(bodyPrimitive?.fontSize ?? 0);
-  expect(headingPrimitive?.bounds.height).toBeGreaterThan(bodyPrimitive?.bounds.height ?? 0);
 });
 
 test("mutates text through editor selections", () => {
-  const inserted = insertText(editorDoc("Hello"), { path: [0, 0], offset: 5 }, ", Vasa");
+  const inserted = insertText(editorDoc("Hello"), { path: [0, 0], offset: 5 }, ", Text");
 
-  expect(inserted.doc).toEqual(editorDoc("Hello, Vasa"));
+  expect(inserted.doc).toEqual(editorDoc("Hello, Text"));
   expect(inserted.selection).toEqual({ path: [0, 0], offset: 11 });
 
   const deleted = deleteBackward(inserted.doc, inserted.selection);
 
-  expect(deleted.doc).toEqual(editorDoc("Hello, Vas"));
+  expect(deleted.doc).toEqual(editorDoc("Hello, Tex"));
   expect(deleted.selection).toEqual({ path: [0, 0], offset: 10 });
 });
 
@@ -2227,16 +2716,16 @@ test("simulates editor controller actions deterministically", () => {
   });
 
   const selected = {
-    doc: editorDoc("Hello Vasa world"),
+    doc: editorDoc("Hello Text world"),
     selection: { path: [0, 0], offset: 10, anchor: { path: [0, 0], offset: 6 } },
   };
 
   expect(applyEditorControllerAction(selected, { type: "cut" })).toEqual({
     clipboardContent: {
       type: "doc",
-      content: [{ type: "paragraph", content: [{ type: "text", text: "Vasa" }] }],
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Text" }] }],
     },
-    clipboardText: "Vasa",
+    clipboardText: "Text",
     state: {
       doc: editorDoc("Hello  world"),
       selection: { path: [0, 0], offset: 6 },
@@ -2244,16 +2733,16 @@ test("simulates editor controller actions deterministically", () => {
   });
 
   const selectedWithTrailingSpace = {
-    doc: editorDoc("Hello Vasa world"),
+    doc: editorDoc("Hello Text world"),
     selection: { path: [0, 0], offset: 11, anchor: { path: [0, 0], offset: 6 } },
   };
 
   expect(applyEditorControllerAction(selectedWithTrailingSpace, { type: "cut" })).toEqual({
     clipboardContent: {
       type: "doc",
-      content: [{ type: "paragraph", content: [{ type: "text", text: "Vasa" }] }],
+      content: [{ type: "paragraph", content: [{ type: "text", text: "Text" }] }],
     },
-    clipboardText: "Vasa",
+    clipboardText: "Text",
     state: {
       doc: editorDoc("Hello  world"),
       selection: { path: [0, 0], offset: 6 },
@@ -2276,13 +2765,13 @@ test("simulates editor controller actions deterministically", () => {
 });
 
 test("splits paragraphs and moves selection within text", () => {
-  const split = splitParagraph(editorDoc("Hello Vasa"), { path: [0, 0], offset: 5 });
+  const split = splitParagraph(editorDoc("Hello Text"), { path: [0, 0], offset: 5 });
 
   expect(split.doc).toEqual({
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Hello" }] },
-      { type: "paragraph", content: [{ type: "text", text: " Vasa" }] },
+      { type: "paragraph", content: [{ type: "text", text: " Text" }] },
     ],
   });
   expect(split.selection).toEqual({ path: [1, 0], offset: 0 });
@@ -2297,10 +2786,8 @@ test("splits paragraphs and moves selection within text", () => {
 });
 
 test("shift enter inserts a line break inside the current paragraph", () => {
-  let session = createEditorSession({
-    doc: editorDoc("Hello Vasa"),
-    selection: { path: [0, 0], offset: 5 },
-  });
+  let doc = editorDoc("Hello Text");
+  let selection: EditorSelection = { path: [0, 0], offset: 5 };
   let prevented = false;
   let suppressedInputType = "";
   const event = {
@@ -2312,13 +2799,10 @@ test("shift enter inserts a line break inside the current paragraph", () => {
   } as Parameters<typeof applyEditorKeymap>[0];
 
   const handled = applyEditorKeymap(event, {
-    editorDocument: session.doc,
+    editorDocument: doc,
     renderDocument: { pages: [] },
     renderLineOptions: { pageHeight: 100 },
     measureText: fixedWidthMeasureText,
-    updateEditor: (update) => {
-      session = update(session);
-    },
     updateSelection: () => {},
     suppressBeforeInput: (inputType) => {
       suppressedInputType = inputType;
@@ -2330,7 +2814,9 @@ test("shift enter inserts a line break inside the current paragraph", () => {
     toggleBlockquote: () => {},
     setBlockType: () => {},
     insertLineBreak: () => {
-      session = insertTextInEditorSession(session, "\n");
+      const inserted = insertText(doc, selection, "\n");
+      doc = inserted.doc;
+      selection = inserted.selection;
     },
     splitParagraph: () => {},
   } satisfies EditorKeymapOptions);
@@ -2338,15 +2824,13 @@ test("shift enter inserts a line break inside the current paragraph", () => {
   expect(handled).toBe(true);
   expect(prevented).toBe(true);
   expect(suppressedInputType).toBe("insertLineBreak");
-  expect(session.doc).toEqual(editorDoc("Hello\n Vasa"));
-  expect(session.selection).toEqual({ path: [0, 0], offset: 6 });
+  expect(doc).toEqual(editorDoc("Hello\n Text"));
+  expect(selection).toEqual({ path: [0, 0], offset: 6 });
 });
 
 test("enter inserts a paragraph below a table gap cursor selection", () => {
-  let session = createEditorSession({
-    doc: editorTableDoc(),
-    selection: { path: [0], offset: 1 },
-  });
+  let doc = editorTableDoc();
+  let selection: EditorSelection = { path: [0], offset: 1 };
   let prevented = false;
   let suppressedInputType = "";
   const event = {
@@ -2357,13 +2841,10 @@ test("enter inserts a paragraph below a table gap cursor selection", () => {
   } as Parameters<typeof applyEditorKeymap>[0];
 
   const handled = applyEditorKeymap(event, {
-    editorDocument: session.doc,
+    editorDocument: doc,
     renderDocument: { pages: [] },
     renderLineOptions: { pageHeight: 100 },
     measureText: fixedWidthMeasureText,
-    updateEditor: (update) => {
-      session = update(session);
-    },
     updateSelection: () => {},
     suppressBeforeInput: (inputType) => {
       suppressedInputType = inputType;
@@ -2376,21 +2857,20 @@ test("enter inserts a paragraph below a table gap cursor selection", () => {
     setBlockType: () => {},
     insertLineBreak: () => {},
     splitParagraph: () => {
-      session = {
-        ...session,
-        ...splitParagraph(session.doc, session.selection),
-      };
+      const split = splitParagraph(doc, selection);
+      doc = split.doc;
+      selection = split.selection;
     },
   } satisfies EditorKeymapOptions);
 
   expect(handled).toBe(true);
   expect(prevented).toBe(true);
   expect(suppressedInputType).toBe("insertParagraph");
-  expect(session.doc.content?.at(-1)).toEqual({
+  expect(doc.content?.at(-1)).toEqual({
     type: "paragraph",
     content: [{ type: "text", text: "" }],
   });
-  expect(session.selection).toEqual({ path: [1, 0], offset: 0 });
+  expect(selection).toEqual({ path: [1, 0], offset: 0 });
 });
 
 test("splitting a styled paragraph preserves sibling text runs and marks", () => {
@@ -2417,7 +2897,7 @@ test("splitting a styled paragraph preserves sibling text runs and marks", () =>
 });
 
 test("splits paragraphs inside blockquotes before the end without leaving the quote", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -2456,7 +2936,7 @@ test("splits paragraphs inside blockquotes before the end without leaving the qu
 });
 
 test("pressing enter at the end of a blockquote creates an empty quote line", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -2487,7 +2967,7 @@ test("pressing enter at the end of a blockquote creates an empty quote line", ()
 });
 
 test("pressing enter in an empty blockquote line exits the quote from the block path", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -2516,7 +2996,7 @@ test("pressing enter in an empty blockquote line exits the quote from the block 
 });
 
 test("pressing enter in a single empty blockquote replaces it with a regular line", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -2536,7 +3016,7 @@ test("pressing enter in a single empty blockquote replaces it with a regular lin
 });
 
 test("left from a regular line after a blockquote moves to the end of the quote", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -2554,13 +3034,13 @@ test("left from a regular line after a blockquote moves to the end of the quote"
 });
 
 test("moves selection across styled sibling text nodes", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
         type: "paragraph",
         content: [
-          { type: "text", text: "Vasa editor " },
+          { type: "text", text: "Text editor " },
           {
             type: "text",
             text: "demo",
@@ -2601,7 +3081,7 @@ test.each([
   { name: "yellow highlighted", marks: [{ type: "highlight", attrs: { color: "#fef08a" } }] },
   { name: "blue colored", marks: [{ type: "textStyle", attrs: { color: "#2563eb" } }] },
 ])("moves into a $name word without an extra boundary navigation", ({ marks }) => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -2848,7 +3328,7 @@ test("moves down from a strikethrough continuation without sticking at a boundar
 });
 
 test("simulates arrow cursor movements across text runs and paragraphs", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -2941,7 +3421,7 @@ test("moves horizontally by rendered grapheme caret stops", () => {
 });
 
 test("moves horizontally through horizontal rule boundaries", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Before" }] },
@@ -2981,8 +3461,269 @@ test("moves horizontally through horizontal rule boundaries", () => {
   expect(move({ path: [1], offset: 1 }, "right")).toEqual({ path: [2, 0], offset: 0 });
 });
 
+test("moves right from the last table cell to the after-table gap cursor", () => {
+  const doc = editorTableDoc();
+  const renderDocument: EditorRenderLineDocument = {
+    pages: [
+      {
+        index: 0,
+        nodes: [
+          {
+            kind: "custom",
+            sourceId: "0",
+            rect: { x: 0, y: 0, width: 160, height: 72 },
+            children: [
+              { kind: "text", sourceId: "0.0.0.0.0", text: "A1", lines: [renderLine("A1", 8, 8)] },
+              { kind: "text", sourceId: "0.0.1.0.0", text: "B1", lines: [renderLine("B1", 80, 8)] },
+              { kind: "text", sourceId: "0.1.0.0.0", text: "A2", lines: [renderLine("A2", 8, 42)] },
+              {
+                kind: "text",
+                sourceId: "0.1.1.0.0",
+                text: "B2",
+                lines: [renderLine("B2", 80, 42)],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  expect(
+    moveSelectionHorizontally(
+      doc,
+      renderDocument,
+      { path: [0, 1, 1, 0, 0], offset: 2 },
+      {
+        direction: "right",
+        granularity: "character",
+        renderLines: cursorRenderLineOptions,
+      },
+    ),
+  ).toEqual({ path: [0], offset: 1 });
+});
+
+test("moves horizontally across table cells with row wrapping", () => {
+  const doc = editorTableDoc();
+  const renderDocument: EditorRenderLineDocument = {
+    pages: [
+      {
+        index: 0,
+        nodes: [
+          {
+            kind: "custom",
+            sourceId: "0",
+            rect: { x: 0, y: 0, width: 160, height: 72 },
+            children: [
+              { kind: "text", sourceId: "0.0.0.0.0", text: "A1", lines: [renderLine("A1", 8, 8)] },
+              { kind: "text", sourceId: "0.0.1.0.0", text: "B1", lines: [renderLine("B1", 80, 8)] },
+              { kind: "text", sourceId: "0.1.0.0.0", text: "A2", lines: [renderLine("A2", 8, 42)] },
+              {
+                kind: "text",
+                sourceId: "0.1.1.0.0",
+                text: "B2",
+                lines: [renderLine("B2", 80, 42)],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const move = (selection: EditorSelection, direction: "left" | "right") =>
+    moveSelectionHorizontally(doc, renderDocument, selection, {
+      direction,
+      granularity: "character",
+      renderLines: cursorRenderLineOptions,
+    });
+
+  expect(move({ path: [0, 0, 0, 0, 0], offset: 2 }, "right")).toEqual({
+    path: [0, 0, 1, 0, 0],
+    offset: 0,
+  });
+  expect(move({ path: [0, 0, 1, 0, 0], offset: 2 }, "right")).toEqual({
+    path: [0, 1, 0, 0, 0],
+    offset: 0,
+  });
+  expect(move({ path: [0, 1, 0, 0, 0], offset: 0 }, "left")).toEqual({
+    path: [0, 0, 1, 0, 0],
+    offset: 2,
+  });
+});
+
+test("moves right from an empty last table cell to the after-table gap cursor", () => {
+  const doc: JSONContent = {
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const renderDocument: EditorRenderLineDocument = {
+    pages: [
+      {
+        index: 0,
+        nodes: [
+          {
+            kind: "custom",
+            sourceId: "0",
+            rect: { x: 0, y: 0, width: 160, height: 72 },
+            children: [
+              {
+                kind: "text",
+                sourceId: "0.1.1.0.0",
+                text: "",
+                lines: [renderLine("", 80, 42)],
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  expect(
+    moveSelectionHorizontally(
+      doc,
+      renderDocument,
+      { path: [0, 1, 1, 0, 0], offset: 0 },
+      {
+        direction: "right",
+        granularity: "character",
+        renderLines: cursorRenderLineOptions,
+      },
+    ),
+  ).toEqual({ path: [0], offset: 1 });
+});
+
+test("moves horizontally across empty table cells with row wrapping", () => {
+  const doc: JSONContent = {
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+  const renderDocument: EditorRenderLineDocument = {
+    pages: [{ index: 0, nodes: [] }],
+  };
+
+  expect(
+    moveSelectionHorizontally(
+      doc,
+      renderDocument,
+      { path: [0, 0, 0, 0, 0], offset: 0 },
+      {
+        direction: "right",
+        granularity: "character",
+        renderLines: cursorRenderLineOptions,
+      },
+    ),
+  ).toEqual({ path: [0, 0, 1, 0, 0], offset: 0 });
+});
+
+test("moves vertically inside tables by row and column", () => {
+  const doc = editorTableDoc();
+  const renderDocument: EditorRenderLineDocument = {
+    pages: [{ index: 0, nodes: [] }],
+  };
+
+  expect(
+    moveSelectionVertically(
+      renderDocument,
+      { path: [0, 0, 1, 0, 0], offset: 1 },
+      "down",
+      fixedWidthMeasureText,
+      cursorRenderLineOptions,
+      doc,
+    ),
+  ).toEqual({ path: [0, 1, 1, 0, 0], offset: 1 });
+  expect(
+    moveSelectionVertically(
+      renderDocument,
+      { path: [0, 1, 0, 0, 0], offset: 2 },
+      "up",
+      fixedWidthMeasureText,
+      cursorRenderLineOptions,
+      doc,
+    ),
+  ).toEqual({ path: [0, 0, 0, 0, 0], offset: 2 });
+});
+
+test("moves vertically inside empty table cells by row and column", () => {
+  const doc: JSONContent = {
+    type: "doc",
+    content: [
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+            ],
+          },
+          {
+            type: "tableRow",
+            content: [
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+              { type: "tableCell", content: [{ type: "paragraph" }] },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  expect(
+    moveSelectionVertically(
+      { pages: [{ index: 0, nodes: [] }] },
+      { path: [0, 0, 1, 0, 0], offset: 0 },
+      "down",
+      fixedWidthMeasureText,
+      cursorRenderLineOptions,
+      doc,
+    ),
+  ).toEqual({ path: [0, 1, 1, 0, 0], offset: 0 });
+});
+
 test("keeps wrapped line cursor placement right-affined inside render wrappers", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "wrapnext" }] }],
   };
@@ -3100,7 +3841,7 @@ test("places real carets before and after large rendered blocks", () => {
 });
 
 test("moves and extends horizontally to rendered line edges", () => {
-  const doc = editorDoc("Hello Vasa world");
+  const doc = editorDoc("Hello Text world");
   const renderDocument: EditorRenderLineDocument = {
     pages: [
       {
@@ -3112,8 +3853,8 @@ test("moves and extends horizontally to rendered line edges", () => {
               {
                 kind: "text",
                 sourceId: "0.0",
-                text: "Hello Vasa world",
-                lines: [renderLine("Hello", 24, 12, 0), renderLine("Vasa world", 24, 32, 6)],
+                text: "Hello Text world",
+                lines: [renderLine("Hello", 24, 12, 0), renderLine("Text world", 24, 32, 6)],
               },
             ],
           },
@@ -3153,7 +3894,7 @@ test("moves and extends horizontally to rendered line edges", () => {
 
 test("replaces and deletes expanded selections", () => {
   const replaced = insertText(
-    editorDoc("Hello Vasa"),
+    editorDoc("Hello Text"),
     { path: [0, 0], offset: 10, anchor: { path: [0, 0], offset: 6 } },
     "world",
   );
@@ -3209,10 +3950,10 @@ test("preserves inline styles while partially deleting a styled word", () => {
         { type: "textStyle", attrs: { backgroundColor: "#fde68a" } },
       ],
     },
-  ] satisfies Array<{ name: string; marks: NonNullable<EditorJson["marks"]> }>;
+  ] satisfies Array<{ name: string; marks: NonNullable<JSONContent["marks"]> }>;
 
   for (const { name, marks } of styledWords) {
-    const doc: EditorJson = {
+    const doc: JSONContent = {
       type: "doc",
       content: [
         {
@@ -3260,7 +4001,7 @@ test("preserves inline styles while partially deleting a styled word", () => {
 });
 
 test("drops inline styles once the entire styled word is deleted", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -3296,10 +4037,10 @@ test("drops inline styles once the entire styled word is deleted", () => {
 });
 
 test("deletes selections across paragraphs", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
-      { type: "paragraph", content: [{ type: "text", text: "Hello Vasa" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Hello Text" }] },
       { type: "paragraph", content: [{ type: "text", text: "Second line" }] },
     ],
   };
@@ -3315,12 +4056,12 @@ test("deletes selections across paragraphs", () => {
 });
 
 test("backspace deletes empty rows and joins paragraphs", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Hello" }] },
       { type: "paragraph", content: [{ type: "text", text: "" }] },
-      { type: "paragraph", content: [{ type: "text", text: "Vasa" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Text" }] },
     ],
   };
 
@@ -3330,21 +4071,21 @@ test("backspace deletes empty rows and joins paragraphs", () => {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Hello" }] },
-      { type: "paragraph", content: [{ type: "text", text: "Vasa" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Text" }] },
     ],
   });
   expect(removedEmptyRow.selection).toEqual({ path: [0, 0], offset: 5 });
 
   const joined = deleteBackward(removedEmptyRow.doc, { path: [1, 0], offset: 0 });
 
-  expect(joined.doc).toEqual(editorDoc("HelloVasa"));
+  expect(joined.doc).toEqual(editorDoc("HelloText"));
   expect(joined.selection).toEqual({ path: [0, 0], offset: 5 });
 });
 
 test("backspace joins blockquote children without removing preceding blocks", () => {
   const doc = createEditorParityDocument();
 
-  const withEmptyQuoteLine: EditorJson = {
+  const withEmptyQuoteLine: JSONContent = {
     ...doc,
     content: [
       ...(doc.content?.slice(0, 6) ?? []),
@@ -3385,12 +4126,12 @@ test("backspace joins blockquote children without removing preceding blocks", ()
 });
 
 test("delete removes empty rows and joins paragraphs forward", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Hello" }] },
       { type: "paragraph", content: [{ type: "text", text: "" }] },
-      { type: "paragraph", content: [{ type: "text", text: "Vasa" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Text" }] },
     ],
   };
 
@@ -3400,19 +4141,19 @@ test("delete removes empty rows and joins paragraphs forward", () => {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Hello" }] },
-      { type: "paragraph", content: [{ type: "text", text: "Vasa" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Text" }] },
     ],
   });
   expect(removedEmptyRow.selection).toEqual({ path: [0, 0], offset: 5 });
 
   const joined = deleteForward(removedEmptyRow.doc, { path: [0, 0], offset: 5 });
 
-  expect(joined.doc).toEqual(editorDoc("HelloVasa"));
+  expect(joined.doc).toEqual(editorDoc("HelloText"));
   expect(joined.selection).toEqual({ path: [0, 0], offset: 5 });
 });
 
 test("backspace pauses before deleting larger block components", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "horizontalRule" },
@@ -3448,7 +4189,7 @@ test("backspace pauses before deleting larger block components", () => {
 });
 
 test("backspace after a blockquote merges editable text into the quote", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -3474,7 +4215,7 @@ test("backspace after a blockquote merges editable text into the quote", () => {
 });
 
 test("delete before a blockquote merges editable text into the quote", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Before " }] },
@@ -3500,7 +4241,7 @@ test("delete before a blockquote merges editable text into the quote", () => {
 });
 
 test("backspace at the start of a blockquote lifts the quote line", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -3517,7 +4258,7 @@ test("backspace at the start of a blockquote lifts the quote line", () => {
 });
 
 test("backspace at the first line of a multi-line blockquote keeps remaining quote lines", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -3546,7 +4287,7 @@ test("backspace at the first line of a multi-line blockquote keeps remaining quo
 });
 
 test("delete at the end of a blockquote lifts the quote line", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -3563,7 +4304,7 @@ test("delete at the end of a blockquote lifts the quote line", () => {
 });
 
 test("backspace after a heading preserves the heading boundary", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Title" }] },
@@ -3583,7 +4324,7 @@ test("backspace after a heading preserves the heading boundary", () => {
 });
 
 test("delete before a heading preserves the heading boundary", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "" }] },
@@ -3603,7 +4344,7 @@ test("delete before a heading preserves the heading boundary", () => {
 });
 
 test("delete pauses before deleting larger block components forward", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "" }] },
@@ -3632,7 +4373,7 @@ test("delete pauses before deleting larger block components forward", () => {
 });
 
 test("deletes horizontal rules from either gap cursor side", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Before" }] },
@@ -3664,10 +4405,10 @@ test("deletes horizontal rules from either gap cursor side", () => {
 });
 
 test("reads selected text for clipboard operations", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
-      { type: "paragraph", content: [{ type: "text", text: "Hello Vasa" }] },
+      { type: "paragraph", content: [{ type: "text", text: "Hello Text" }] },
       { type: "paragraph", content: [{ type: "text", text: "Second line" }] },
       { type: "paragraph", content: [{ type: "text", text: "Third paragraph" }] },
     ],
@@ -3675,15 +4416,15 @@ test("reads selected text for clipboard operations", () => {
 
   expect(
     getSelectedText(doc, { path: [0, 0], offset: 10, anchor: { path: [0, 0], offset: 6 } }),
-  ).toBe("Vasa");
+  ).toBe("Text");
   expect(
     getSelectedText(doc, { path: [2, 0], offset: 5, anchor: { path: [0, 0], offset: 6 } }),
-  ).toBe("Vasa\n\nSecond line\n\nThird");
+  ).toBe("Text\n\nSecond line\n\nThird");
   expect(getSelectedText(doc, { path: [0, 0], offset: 6 })).toBe("");
 });
 
 test("selects words and rendered lines through editor actions", () => {
-  const doc = editorDoc("Hello Vasa world");
+  const doc = editorDoc("Hello Text world");
 
   expect(selectWordAtPoint(doc, { path: [0, 0], offset: 8 })).toEqual({
     path: [0, 0],
@@ -3691,7 +4432,7 @@ test("selects words and rendered lines through editor actions", () => {
     anchor: { path: [0, 0], offset: 6 },
   });
   expect(
-    selectLineAtPoint({ path: [0, 0], offset: 8 }, { path: [0, 0], start: 6, text: "Vasa world" }),
+    selectLineAtPoint({ path: [0, 0], offset: 8 }, { path: [0, 0], start: 6, text: "Text world" }),
   ).toEqual({
     path: [0, 0],
     offset: 16,
@@ -3700,7 +4441,7 @@ test("selects words and rendered lines through editor actions", () => {
 });
 
 test("treats punctuation and symbols as word separators", () => {
-  const doc = editorDoc("Hello,Vasa+world!");
+  const doc = editorDoc("Hello,Text+world!");
   const renderDocument = { pages: [{ index: 0, nodes: [] }] };
   const renderLines = { pageHeight: 800 };
 
@@ -3784,14 +4525,14 @@ test("keeps symbols with the previous word when measuring editor line wraps", ()
 });
 
 test("selects all document text across paragraphs and text runs", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
         type: "paragraph",
         content: [
           { type: "text", text: "Hello " },
-          { type: "text", text: "Vasa", marks: [{ type: "bold" }] },
+          { type: "text", text: "Text", marks: [{ type: "bold" }] },
         ],
       },
       {
@@ -3811,7 +4552,7 @@ test("selects all document text across paragraphs and text runs", () => {
     offset: 4,
     anchor: { path: [0, 0], offset: 0 },
   });
-  expect(getSelectedText(doc, selection)).toBe("Hello Vasa\n\nSecond line");
+  expect(getSelectedText(doc, selection)).toBe("Hello Text\n\nSecond line");
 });
 
 test("selects all document text across headings and blockquotes", () => {
@@ -3837,7 +4578,7 @@ test("copies and pastes selected content with block formatting", () => {
   expect(content).toEqual({
     type: "doc",
     content: [...(doc.content?.slice(0, 6) ?? []), doc.content?.[7]].filter(
-      (node): node is EditorJson => node !== undefined,
+      (node): node is JSONContent => node !== undefined,
     ),
   });
 
@@ -3860,7 +4601,7 @@ test("copies and pastes selected content with block formatting", () => {
 });
 
 test("pastes single-block formatted content inline", () => {
-  const content: EditorJson = {
+  const content: JSONContent = {
     type: "doc",
     content: [
       {
@@ -3891,13 +4632,13 @@ test("pastes single-block formatted content inline", () => {
 });
 
 test("pastes single-block content inline at the start of a heading", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Heading" }] },
     ],
   };
-  const content: EditorJson = {
+  const content: JSONContent = {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Pasted " }] }],
   };
@@ -3918,14 +4659,14 @@ test("pastes single-block content inline at the start of a heading", () => {
 });
 
 test("pastes single-block content inline before a following heading", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       { type: "paragraph", content: [{ type: "text", text: "Before " }] },
       { type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Heading" }] },
     ],
   };
-  const content: EditorJson = {
+  const content: JSONContent = {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Pasted" }] }],
   };
@@ -3950,7 +4691,7 @@ test("pastes single-block content at the end of a styled multi-run paragraph", (
   const paragraph = doc.content?.[3];
   const lastRun = paragraph?.content?.at(-1);
   const lastRunText = lastRun?.text ?? "";
-  const content: EditorJson = {
+  const content: JSONContent = {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Script " }] }],
   };
@@ -3984,7 +4725,7 @@ test("pastes single-block content using aggregate paragraph offsets", () => {
     offset: doc.content?.[3]?.content?.[4]?.text?.length ?? 0,
     anchor: { path: [3, 0], offset: 0 },
   });
-  const content: EditorJson = {
+  const content: JSONContent = {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text: "Script " }] }],
   };
@@ -4001,7 +4742,7 @@ test("pastes single-block content using aggregate paragraph offsets", () => {
 });
 
 test("pastes leading-newline rich content as a new block", () => {
-  const content: EditorJson = {
+  const content: JSONContent = {
     type: "doc",
     content: [
       {
@@ -4040,7 +4781,7 @@ test("serializes and parses clipboard html with document formatting", () => {
   expect(parsed).toEqual({
     type: "doc",
     content: [...(doc.content?.slice(0, 6) ?? []), doc.content?.[7]].filter(
-      (node): node is EditorJson => node !== undefined,
+      (node): node is JSONContent => node !== undefined,
     ),
   });
 });
@@ -4113,7 +4854,7 @@ test("deletes by editor action granularity", () => {
   });
 
   const wordDeleted = deleteByGranularity(
-    editorDoc("Hello Vasa world"),
+    editorDoc("Hello Text world"),
     {
       path: [0, 0],
       offset: 7,
@@ -4128,7 +4869,7 @@ test("deletes by editor action granularity", () => {
   expect(wordDeleted.selection).toEqual({ path: [0, 0], offset: 6 });
 
   const currentWordDeleted = deleteByGranularity(
-    editorDoc("Hello Vasa world"),
+    editorDoc("Hello Text world"),
     {
       path: [0, 0],
       offset: 6,
@@ -4143,7 +4884,7 @@ test("deletes by editor action granularity", () => {
   expect(currentWordDeleted.selection).toEqual({ path: [0, 0], offset: 6 });
 
   const lineDeleted = deleteByGranularity(
-    editorDoc("Hello Vasa world"),
+    editorDoc("Hello Text world"),
     {
       path: [0, 0],
       offset: 8,
@@ -4151,7 +4892,7 @@ test("deletes by editor action granularity", () => {
     {
       direction: "forward",
       granularity: "line",
-      line: { path: [0, 0], start: 6, text: "Vasa world" },
+      line: { path: [0, 0], start: 6, text: "Text world" },
     },
   );
 
@@ -4160,7 +4901,7 @@ test("deletes by editor action granularity", () => {
 });
 
 test("trims accidental trailing spaces from cut selections", () => {
-  const doc = editorDoc("Hello Vasa world");
+  const doc = editorDoc("Hello Text world");
 
   expect(
     trimTrailingInlineWhitespaceSelection(doc, {
@@ -4205,7 +4946,7 @@ test("preferredSelectableFonts keeps one regular font per family", () => {
 });
 
 test("isSelectionInsideEditorNodeType detects ancestor nodes", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -4247,14 +4988,38 @@ test("selectedRenderPageIndex resolves the page containing a source path", () =>
   expect(selectedRenderPageIndex(document, [2])).toBe(3);
 });
 
-function editorDoc(text: string): EditorJson {
+function editorDoc(text: string): JSONContent {
   return {
     type: "doc",
     content: [{ type: "paragraph", content: [{ type: "text", text }] }],
   };
 }
 
-function editorLayoutPageIndexForPath(doc: EditorJson, path: number[]) {
+function tableBetweenParagraphsDoc(): JSONContent {
+  return {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Before" }] },
+      {
+        type: "table",
+        content: [
+          {
+            type: "tableRow",
+            content: [
+              {
+                type: "tableCell",
+                content: [{ type: "paragraph", content: [{ type: "text", text: "Cell" }] }],
+              },
+            ],
+          },
+        ],
+      },
+      { type: "paragraph", content: [{ type: "text", text: "After" }] },
+    ],
+  };
+}
+
+function editorLayoutPageIndexForPath(doc: JSONContent, path: number[]) {
   const layout = layoutDocument(
     createEditorLayoutTree(doc, {
       rootStyle: { gap: 14 },
@@ -4280,6 +5045,25 @@ function editorLayoutPageIndexForPath(doc: EditorJson, path: number[]) {
   return page?.index ?? -1;
 }
 
+function editorLayoutForPageBreakRegression(doc: JSONContent) {
+  return layoutDocument(
+    createEditorLayoutTree(doc, {
+      rootStyle: { gap: 14 },
+      paragraphStyle: { flexDirection: "column" },
+      textStyle: { lineHeight: 16 },
+    }),
+    {
+      page: { width: 120, height: 74, margin: 0 },
+      measurer: createMonospaceTextMeasurer({ charWidth: 8 }),
+      textGrid: false,
+    },
+  );
+}
+
+function lastLayoutPageContentBottomY(page: LayoutResult["pages"][number]) {
+  return Math.max(page.content.y, ...page.boxes.map((box) => box.rect.y + box.rect.height));
+}
+
 function layoutPageContainsSourceId(page: LayoutResult["pages"][number], sourceId: string) {
   const stack = [...page.boxes];
 
@@ -4293,7 +5077,7 @@ function layoutPageContainsSourceId(page: LayoutResult["pages"][number], sourceI
   return false;
 }
 
-function editorTableDoc(): EditorJson {
+function editorTableDoc(): JSONContent {
   return {
     type: "doc",
     content: [
@@ -4308,7 +5092,7 @@ function editorTableDoc(): EditorJson {
 function tableRow(
   texts: string[],
   cellType: "tableCell" | "tableHeader" = "tableCell",
-): EditorJson {
+): JSONContent {
   return {
     type: "tableRow",
     content: texts.map((text) => ({

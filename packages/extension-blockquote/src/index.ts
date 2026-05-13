@@ -1,10 +1,10 @@
-import { Node, type VasaExtension } from "@vasa/core";
+import { Node, type SkrivaExtension } from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
 };
 
-export const Blockquote: VasaExtension = {
+export const Blockquote: SkrivaExtension = {
   name: "blockquote",
   tiptap: Node.create({
     name: "blockquote",

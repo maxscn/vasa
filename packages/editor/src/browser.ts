@@ -1,10 +1,10 @@
-import type { CanvasSurface } from "@vasa/canvas";
+import type { CanvasSurface } from "@skriva/canvas";
 import {
   clientPointToEditorSelection,
   type EditorRenderLineDocument,
   type EditorRenderLineOptions,
-  type EditorSelection,
-} from "./index.ts";
+} from "./interaction.ts";
+import type { EditorSelection } from "./model.ts";
 
 export function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;

@@ -32,7 +32,7 @@ test("summarizes channel-level image diffs", () => {
 });
 
 test("writes renderer comparison PNG artifacts and a JSON report", () => {
-  const dir = mkdtempSync(join(tmpdir(), "vasa-render-test-"));
+  const dir = mkdtempSync(join(tmpdir(), "skriva-render-test-"));
   const canvas = testImage([0, 0, 0, 255]);
   const pdf = testImage([255, 255, 255, 255]);
   const diff = imageDiff(canvas, pdf);

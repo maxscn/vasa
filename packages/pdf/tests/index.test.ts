@@ -5,12 +5,12 @@ import {
   type BoxNode,
   type MeasureTextInput,
   type TextMeasurer,
-} from "@vasa/layout";
-import { createRenderDocument } from "@vasa/renderer";
-import { buildCanvasScene, createCanvasCommands } from "../../canvas/src/index.ts";
+} from "@skriva/layout";
+import { createRenderDocument } from "@skriva/renderer";
+import { Scene, createCanvasCommands, type CanvasCommand } from "../../canvas/src/index.ts";
 import {
   createEditorLayoutTree as createSourceEditorLayoutTree,
-  type EditorJson,
+  type JSONContent,
 } from "../../editor/src/index.ts";
 import { layoutDocument as layoutSourceDocument } from "../../layout/src/index.ts";
 import { extractPdfText } from "../../render-test/src/index.ts";
@@ -18,11 +18,28 @@ import {
   createRenderDocument as createSourceRenderDocument,
   type RenderDocument,
 } from "../../renderer/src/index.ts";
+
+type CanvasFillTextCommand = CanvasCommand & {
+  type: "fillText";
+  text: string;
+  x: number;
+  y: number;
+  font: string;
+};
+
+type TextSummaryCommand = {
+  type: string;
+  text: string;
+  x: number;
+  y: number;
+};
 import {
   Box,
   createPdfCommands,
   Document,
+  MissingPdfCoverageError,
   renderDocumentToPdf,
+  renderSceneGraphToPdf,
   renderReactToLayoutTree,
   Text,
   writePdf,
@@ -161,7 +178,7 @@ test("keeps canvas and PDF text command order and positions aligned", () => {
   };
   const result = renderDocumentToPdf(document, { page, measurer });
   const renderDocument = createRenderDocument(result.layout);
-  const canvasCommands = createCanvasCommands(buildCanvasScene(renderDocument));
+  const canvasCommands = createCanvasCommands(Scene(renderDocument));
 
   expect(textSummary(canvasCommands)).toEqual(textSummary(result.commands));
   expect(result.commands.filter((command) => command.type === "text")).toEqual([
@@ -201,6 +218,66 @@ test("emits blockquote border rects from shared render document boxes", () => {
   });
 });
 
+test("fails PDF export when custom scene node PDF coverage is missing", () => {
+  const renderDocument: RenderDocument = {
+    pages: [
+      {
+        index: 0,
+        rect: { x: 0, y: 0, width: 200, height: 120 },
+        content: { x: 10, y: 10, width: 180, height: 100 },
+        nodes: [
+          {
+            key: "custom:widget",
+            kind: "custom",
+            name: "widget",
+            rect: { x: 10, y: 10, width: 50, height: 20 },
+            children: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  expect(() => createPdfCommands(renderDocument, page)).toThrow(MissingPdfCoverageError);
+  expect(() => renderSceneGraphToPdf(renderDocument, { page })).toThrow(
+    'No native PDF coverage is registered for scene node "widget".',
+  );
+});
+
+test("renders PDF directly from a Document Scene Graph without relayout", () => {
+  const renderDocument: RenderDocument = {
+    pages: [
+      {
+        index: 0,
+        rect: { x: 0, y: 0, width: 200, height: 120 },
+        content: { x: 10, y: 10, width: 180, height: 100 },
+        nodes: [
+          {
+            key: "text:fixed",
+            kind: "text",
+            sourceId: "fixed",
+            rect: { x: 30, y: 40, width: 40, height: 12 },
+            text: "fixed",
+            lines: [{ text: "fixed", x: 30, y: 40, width: 40, height: 12 }],
+            children: [],
+          },
+        ],
+      },
+    ],
+  };
+
+  const result = renderSceneGraphToPdf(renderDocument, { page });
+
+  expect(result.layout).toBeUndefined();
+  expect(result.commands).toContainEqual({
+    type: "text",
+    text: "fixed",
+    x: 30,
+    y: 40,
+    fontSize: 12,
+  });
+});
+
 test("keeps canvas and PDF font sizes aligned when canvas paint only resolves fontSize", () => {
   const renderDocument: RenderDocument = {
     pages: [
@@ -235,13 +312,13 @@ test("keeps canvas and PDF font sizes aligned when canvas paint only resolves fo
   };
   const pdfCommands = createPdfCommands(renderDocument, page);
   const canvasText = createCanvasCommands(
-    buildCanvasScene(renderDocument, {
+    Scene(renderDocument, {
       text: (box, lineIndex) => {
         const line = box.lines?.[lineIndex];
         return { fontSize: line?.fontSize };
       },
     }),
-  ).filter((command) => command.type === "fillText");
+  ).filter(isCanvasFillTextCommand);
 
   expect(pdfCommands.filter((command) => command.type === "text")).toEqual([
     { type: "text", text: "H", x: 10, y: 10, fontSize: 16 },
@@ -279,7 +356,7 @@ test("uses CSS font size for PDF text commands instead of line height", () => {
 });
 
 test("keeps text after a bolded editor line below the wrapped bold run", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -306,7 +383,7 @@ test("keeps text after a bolded editor line below the wrapped bold run", () => {
     }),
   );
   const pdfCommands = createPdfCommands(renderDocument, regressionPage);
-  const canvasText = textSummary(createCanvasCommands(buildCanvasScene(renderDocument)));
+  const canvasText = textSummary(createCanvasCommands(Scene(renderDocument)));
 
   expect(canvasText).toEqual([
     ["alpha", 10, 10],
@@ -322,7 +399,7 @@ test("keeps text after a bolded editor line below the wrapped bold run", () => {
 });
 
 test("keeps bolded editor text inline while the paragraph still fits", () => {
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -350,7 +427,7 @@ test("keeps bolded editor text inline while the paragraph still fits", () => {
     }),
   );
   const pdfCommands = createPdfCommands(renderDocument, regressionPage);
-  const canvasText = textSummary(createCanvasCommands(buildCanvasScene(renderDocument)));
+  const canvasText = textSummary(createCanvasCommands(Scene(renderDocument)));
 
   expect(canvasText).toEqual([
     ["alpha ", 10, 10],
@@ -499,13 +576,13 @@ test("exports named React primitives through the PDF reconciler", () => {
 
 test("preserves custom PDF primitives for renderer extensions", () => {
   const tree = renderReactToLayoutTree(
-    createElement("badge", { id: "brand", label: "Vasa", style: { width: 32, height: 12 } }),
+    createElement("badge", { id: "brand", label: "Skriva", style: { width: 32, height: 12 } }),
   );
 
   expect(tree.children?.[0]).toEqual({
     type: "badge",
     id: "brand",
-    label: "Vasa",
+    label: "Skriva",
     style: { width: 32, height: 12 },
     children: [],
   });
@@ -518,9 +595,18 @@ function rect(x: number, y: number, width: number, height: number) {
 function textSummary(
   commands: ReturnType<typeof createCanvasCommands> | ReturnType<typeof createPdfCommands>,
 ) {
-  return commands
-    .filter((command) => command.type === "fillText" || command.type === "text")
+  return (commands as unknown[])
+    .filter(isTextSummaryCommand)
     .map((command) => [command.text, command.x, command.y]);
+}
+
+function isCanvasFillTextCommand(command: CanvasCommand): command is CanvasFillTextCommand {
+  return (command as { type?: string }).type === "fillText";
+}
+
+function isTextSummaryCommand(command: unknown): command is TextSummaryCommand {
+  const type = (command as { type?: string }).type;
+  return type === "fillText" || type === "text";
 }
 
 function wrapTestInput(input: MeasureTextInput, charWidth: number) {

@@ -1,5 +1,5 @@
 {
-  "name": "@vasa/core",
+  "name": "@skriva/core",
   "version": "0.0.0",
   "description": "A starter for creating a TypeScript package.",
   "homepage": "https://github.com/author/library#readme",
@@ -31,9 +31,9 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@tiptap/core": "^3.22.3",
-    "@vasa/layout": "workspace:*",
-    "@vasa/renderer": "workspace:*"
+    "@skriva/layout": "workspace:*",
+    "@skriva/renderer": "workspace:*",
+    "@tiptap/core": "^3.22.3"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

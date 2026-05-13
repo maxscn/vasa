@@ -18,6 +18,9 @@ catalogs:
     '@tiptap/extension-table':
       specifier: ^3.22.5
       version: 3.22.5
+    '@tiptap/pm':
+      specifier: ^3.22.5
+      version: 3.22.5
     '@tiptap/react':
       specifier: ^3.22.5
       version: 3.22.5
@@ -51,7 +54,7 @@ importers:
 
   .:
     devDependencies:
-      '@vasa/render-test':
+      '@skriva/render-test':
         specifier: workspace:*
         version: link:packages/render-test
       vite-plus:
@@ -88,6 +91,9 @@ importers:
 
   apps/editor:
     dependencies:
+      '@opeinspection/skriva':
+        specifier: workspace:*
+        version: link:../../packages/editor
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.2.4(@voidzero-dev/vite-plus-core@0.1.20(@types/node@22.19.17)(esbuild@0.27.3)(jiti@2.6.1)(typescript@6.0.2)(yaml@2.8.3))
@@ -112,36 +118,6 @@ importers:
       '@tanstack/router-plugin':
         specifier: ^1.132.0
         version: 1.167.34(@tanstack/react-router@1.169.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@voidzero-dev/vite-plus-core@0.1.20(@types/node@22.19.17)(esbuild@0.27.3)(jiti@2.6.1)(typescript@6.0.2)(yaml@2.8.3))
-      '@vasa/canvas':
-        specifier: workspace:*
-        version: link:../../packages/canvas
-      '@vasa/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@vasa/editor':
-        specifier: workspace:*
-        version: link:../../packages/editor
-      '@vasa/extension-horizontal-rule':
-        specifier: workspace:*
-        version: link:../../packages/extension-horizontal-rule
-      '@vasa/extension-svg':
-        specifier: workspace:*
-        version: link:../../packages/extension-svg
-      '@vasa/extension-table':
-        specifier: workspace:*
-        version: link:../../packages/extension-table
-      '@vasa/font':
-        specifier: workspace:*
-        version: link:../../packages/font
-      '@vasa/layout':
-        specifier: workspace:*
-        version: link:../../packages/layout
-      '@vasa/pdf':
-        specifier: workspace:*
-        version: link:../../packages/pdf
-      '@vasa/renderer':
-        specifier: workspace:*
-        version: link:../../packages/renderer
       lucide-react:
         specifier: ^0.545.0
         version: 0.545.0(react@19.2.4)
@@ -188,9 +164,6 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.0
         version: 19.2.3(@types/react@19.2.14)
-      '@vasa/render-test':
-        specifier: workspace:*
-        version: link:../../packages/render-test
       '@vitejs/plugin-react':
         specifier: ^6.0.1
         version: 6.0.1(@rolldown/plugin-babel@0.2.3(@babel/core@7.29.0)(@babel/runtime@7.29.2)(@voidzero-dev/vite-plus-core@0.1.20(@types/node@22.19.17)(esbuild@0.27.3)(jiti@2.6.1)(typescript@6.0.2)(yaml@2.8.3))(rolldown@1.0.0-rc.18))(@voidzero-dev/vite-plus-core@0.1.20(@types/node@22.19.17)(esbuild@0.27.3)(jiti@2.6.1)(typescript@6.0.2)(yaml@2.8.3))(babel-plugin-react-compiler@1.0.0)
@@ -212,6 +185,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@opeinspection/skriva':
+        specifier: workspace:*
+        version: link:../../packages/editor
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.2.4(@voidzero-dev/vite-plus-core@0.1.20(@types/node@22.19.17)(esbuild@0.27.3)(jiti@2.6.1)(typescript@6.0.2)(yaml@2.8.3))
@@ -233,39 +209,6 @@ importers:
       '@tanstack/router-plugin':
         specifier: ^1.132.0
         version: 1.167.34(@tanstack/react-router@1.169.2(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(@voidzero-dev/vite-plus-core@0.1.20(@types/node@22.19.17)(esbuild@0.27.3)(jiti@2.6.1)(typescript@6.0.2)(yaml@2.8.3))
-      '@vasa/canvas':
-        specifier: workspace:*
-        version: link:../../packages/canvas
-      '@vasa/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@vasa/editor':
-        specifier: workspace:*
-        version: link:../../packages/editor
-      '@vasa/extension-horizontal-rule':
-        specifier: workspace:*
-        version: link:../../packages/extension-horizontal-rule
-      '@vasa/extension-line-height':
-        specifier: workspace:*
-        version: link:../../packages/extension-line-height
-      '@vasa/extension-svg':
-        specifier: workspace:*
-        version: link:../../packages/extension-svg
-      '@vasa/extension-table':
-        specifier: workspace:*
-        version: link:../../packages/extension-table
-      '@vasa/font':
-        specifier: workspace:*
-        version: link:../../packages/font
-      '@vasa/layout':
-        specifier: workspace:*
-        version: link:../../packages/layout
-      '@vasa/pdf':
-        specifier: workspace:*
-        version: link:../../packages/pdf
-      '@vasa/renderer':
-        specifier: workspace:*
-        version: link:../../packages/renderer
       lucide-react:
         specifier: ^0.545.0
         version: 0.545.0(react@19.2.4)
@@ -324,10 +267,10 @@ importers:
 
   packages/canvas:
     dependencies:
-      '@vasa/layout':
+      '@skriva/layout':
         specifier: workspace:*
         version: link:../layout
-      '@vasa/renderer':
+      '@skriva/renderer':
         specifier: workspace:*
         version: link:../renderer
       react-reconciler:
@@ -358,15 +301,15 @@ importers:
 
   packages/core:
     dependencies:
+      '@skriva/layout':
+        specifier: workspace:*
+        version: link:../layout
+      '@skriva/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@tiptap/core':
         specifier: ^3.22.3
         version: 3.22.5(@tiptap/pm@3.22.5)
-      '@vasa/layout':
-        specifier: workspace:*
-        version: link:../layout
-      '@vasa/renderer':
-        specifier: workspace:*
-        version: link:../renderer
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -386,99 +329,105 @@ importers:
 
   packages/editor:
     dependencies:
+      '@skriva/canvas':
+        specifier: workspace:*
+        version: link:../canvas
+      '@skriva/core':
+        specifier: workspace:*
+        version: link:../core
+      '@skriva/extension-blockquote':
+        specifier: workspace:*
+        version: link:../extension-blockquote
+      '@skriva/extension-bold':
+        specifier: workspace:*
+        version: link:../extension-bold
+      '@skriva/extension-code':
+        specifier: workspace:*
+        version: link:../extension-code
+      '@skriva/extension-color':
+        specifier: workspace:*
+        version: link:../extension-color
+      '@skriva/extension-document':
+        specifier: workspace:*
+        version: link:../extension-document
+      '@skriva/extension-font-family':
+        specifier: workspace:*
+        version: link:../extension-font-family
+      '@skriva/extension-font-size':
+        specifier: workspace:*
+        version: link:../extension-font-size
+      '@skriva/extension-heading':
+        specifier: workspace:*
+        version: link:../extension-heading
+      '@skriva/extension-highlight':
+        specifier: workspace:*
+        version: link:../extension-highlight
+      '@skriva/extension-horizontal-rule':
+        specifier: workspace:*
+        version: link:../extension-horizontal-rule
+      '@skriva/extension-italic':
+        specifier: workspace:*
+        version: link:../extension-italic
+      '@skriva/extension-line-height':
+        specifier: workspace:*
+        version: link:../extension-line-height
+      '@skriva/extension-paragraph':
+        specifier: workspace:*
+        version: link:../extension-paragraph
+      '@skriva/extension-strike':
+        specifier: workspace:*
+        version: link:../extension-strike
+      '@skriva/extension-subscript':
+        specifier: workspace:*
+        version: link:../extension-subscript
+      '@skriva/extension-superscript':
+        specifier: workspace:*
+        version: link:../extension-superscript
+      '@skriva/extension-svg':
+        specifier: workspace:*
+        version: link:../extension-svg
+      '@skriva/extension-table':
+        specifier: workspace:*
+        version: link:../extension-table
+      '@skriva/extension-text':
+        specifier: workspace:*
+        version: link:../extension-text
+      '@skriva/extension-text-style':
+        specifier: workspace:*
+        version: link:../extension-text-style
+      '@skriva/extension-underline':
+        specifier: workspace:*
+        version: link:../extension-underline
+      '@skriva/font':
+        specifier: workspace:*
+        version: link:../font
+      '@skriva/layout':
+        specifier: workspace:*
+        version: link:../layout
+      '@skriva/pdf':
+        specifier: workspace:*
+        version: link:../pdf
+      '@skriva/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+      '@tiptap/pm':
+        specifier: 'catalog:'
+        version: 3.22.5
       '@tiptap/react':
         specifier: 'catalog:'
         version: 3.22.5(@floating-ui/dom@1.7.6)(@tiptap/core@3.22.5(@tiptap/pm@3.22.5))(@tiptap/pm@3.22.5)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      '@vasa/canvas':
-        specifier: workspace:*
-        version: link:../canvas
-      '@vasa/core':
-        specifier: workspace:*
-        version: link:../core
-      '@vasa/extension-blockquote':
-        specifier: workspace:*
-        version: link:../extension-blockquote
-      '@vasa/extension-bold':
-        specifier: workspace:*
-        version: link:../extension-bold
-      '@vasa/extension-code':
-        specifier: workspace:*
-        version: link:../extension-code
-      '@vasa/extension-color':
-        specifier: workspace:*
-        version: link:../extension-color
-      '@vasa/extension-document':
-        specifier: workspace:*
-        version: link:../extension-document
-      '@vasa/extension-font-family':
-        specifier: workspace:*
-        version: link:../extension-font-family
-      '@vasa/extension-font-size':
-        specifier: workspace:*
-        version: link:../extension-font-size
-      '@vasa/extension-heading':
-        specifier: workspace:*
-        version: link:../extension-heading
-      '@vasa/extension-highlight':
-        specifier: workspace:*
-        version: link:../extension-highlight
-      '@vasa/extension-horizontal-rule':
-        specifier: workspace:*
-        version: link:../extension-horizontal-rule
-      '@vasa/extension-italic':
-        specifier: workspace:*
-        version: link:../extension-italic
-      '@vasa/extension-line-height':
-        specifier: workspace:*
-        version: link:../extension-line-height
-      '@vasa/extension-paragraph':
-        specifier: workspace:*
-        version: link:../extension-paragraph
-      '@vasa/extension-strike':
-        specifier: workspace:*
-        version: link:../extension-strike
-      '@vasa/extension-subscript':
-        specifier: workspace:*
-        version: link:../extension-subscript
-      '@vasa/extension-superscript':
-        specifier: workspace:*
-        version: link:../extension-superscript
-      '@vasa/extension-svg':
-        specifier: workspace:*
-        version: link:../extension-svg
-      '@vasa/extension-table':
-        specifier: workspace:*
-        version: link:../extension-table
-      '@vasa/extension-text':
-        specifier: workspace:*
-        version: link:../extension-text
-      '@vasa/extension-text-style':
-        specifier: workspace:*
-        version: link:../extension-text-style
-      '@vasa/extension-underline':
-        specifier: workspace:*
-        version: link:../extension-underline
-      '@vasa/font':
-        specifier: workspace:*
-        version: link:../font
-      '@vasa/layout':
-        specifier: workspace:*
-        version: link:../layout
-      '@vasa/pdf':
-        specifier: workspace:*
-        version: link:../pdf
-      '@vasa/renderer':
-        specifier: workspace:*
-        version: link:../renderer
-      '@vasa/webgl':
-        specifier: workspace:*
-        version: link:../webgl
       lucide-react:
         specifier: ^0.545.0
         version: 0.545.0(react@19.2.4)
       pdfjs-dist:
         specifier: 'catalog:'
         version: 5.7.284
+      prosemirror-commands:
+        specifier: ^1.7.1
+        version: 1.7.1
+      prosemirror-state:
+        specifier: ^1.4.4
+        version: 1.4.4
       react:
         specifier: ^19.2.0
         version: 19.2.4
@@ -504,7 +453,7 @@ importers:
 
   packages/extension-blockquote:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -523,7 +472,7 @@ importers:
 
   packages/extension-bold:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -542,7 +491,7 @@ importers:
 
   packages/extension-code:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -561,10 +510,10 @@ importers:
 
   packages/extension-color:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
-      '@vasa/extension-text-style':
+      '@skriva/extension-text-style':
         specifier: workspace:*
         version: link:../extension-text-style
     devDependencies:
@@ -583,7 +532,7 @@ importers:
 
   packages/extension-document:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -602,10 +551,10 @@ importers:
 
   packages/extension-font-family:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
-      '@vasa/extension-text-style':
+      '@skriva/extension-text-style':
         specifier: workspace:*
         version: link:../extension-text-style
     devDependencies:
@@ -624,10 +573,10 @@ importers:
 
   packages/extension-font-size:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
-      '@vasa/extension-text-style':
+      '@skriva/extension-text-style':
         specifier: workspace:*
         version: link:../extension-text-style
     devDependencies:
@@ -646,7 +595,7 @@ importers:
 
   packages/extension-heading:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -665,7 +614,7 @@ importers:
 
   packages/extension-highlight:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -684,28 +633,28 @@ importers:
 
   packages/extension-horizontal-rule:
     dependencies:
-      '@vasa/canvas':
+      '@skriva/canvas':
         specifier: workspace:*
         version: link:../canvas
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
-      '@vasa/layout':
+      '@skriva/layout':
         specifier: workspace:*
         version: link:../layout
-      '@vasa/pdf':
+      '@skriva/pdf':
         specifier: workspace:*
         version: link:../pdf
     devDependencies:
+      '@skriva/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.2
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260328.1
         version: 7.0.0-dev.20260328.1
-      '@vasa/renderer':
-        specifier: workspace:*
-        version: link:../renderer
       typescript:
         specifier: ^6.0.2
         version: 6.0.2
@@ -715,7 +664,7 @@ importers:
 
   packages/extension-italic:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -734,10 +683,10 @@ importers:
 
   packages/extension-line-height:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
-      '@vasa/extension-text-style':
+      '@skriva/extension-text-style':
         specifier: workspace:*
         version: link:../extension-text-style
     devDependencies:
@@ -756,7 +705,7 @@ importers:
 
   packages/extension-paragraph:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -775,7 +724,7 @@ importers:
 
   packages/extension-strike:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -794,7 +743,7 @@ importers:
 
   packages/extension-subscript:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -813,7 +762,7 @@ importers:
 
   packages/extension-superscript:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -832,19 +781,19 @@ importers:
 
   packages/extension-svg:
     dependencies:
-      '@vasa/canvas':
+      '@skriva/canvas':
         specifier: workspace:*
         version: link:../canvas
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
-      '@vasa/layout':
+      '@skriva/layout':
         specifier: workspace:*
         version: link:../layout
-      '@vasa/pdf':
+      '@skriva/pdf':
         specifier: workspace:*
         version: link:../pdf
-      '@vasa/renderer':
+      '@skriva/renderer':
         specifier: workspace:*
         version: link:../renderer
       react:
@@ -869,33 +818,33 @@ importers:
 
   packages/extension-table:
     dependencies:
+      '@skriva/canvas':
+        specifier: workspace:*
+        version: link:../canvas
+      '@skriva/core':
+        specifier: workspace:*
+        version: link:../core
+      '@skriva/extension-document':
+        specifier: workspace:*
+        version: link:../extension-document
+      '@skriva/extension-paragraph':
+        specifier: workspace:*
+        version: link:../extension-paragraph
+      '@skriva/extension-text':
+        specifier: workspace:*
+        version: link:../extension-text
+      '@skriva/layout':
+        specifier: workspace:*
+        version: link:../layout
+      '@skriva/pdf':
+        specifier: workspace:*
+        version: link:../pdf
+      '@skriva/renderer':
+        specifier: workspace:*
+        version: link:../renderer
       '@tiptap/extension-table':
         specifier: 'catalog:'
         version: 3.22.5(@tiptap/core@3.22.5(@tiptap/pm@3.22.5))(@tiptap/pm@3.22.5)
-      '@vasa/canvas':
-        specifier: workspace:*
-        version: link:../canvas
-      '@vasa/core':
-        specifier: workspace:*
-        version: link:../core
-      '@vasa/extension-document':
-        specifier: workspace:*
-        version: link:../extension-document
-      '@vasa/extension-paragraph':
-        specifier: workspace:*
-        version: link:../extension-paragraph
-      '@vasa/extension-text':
-        specifier: workspace:*
-        version: link:../extension-text
-      '@vasa/layout':
-        specifier: workspace:*
-        version: link:../layout
-      '@vasa/pdf':
-        specifier: workspace:*
-        version: link:../pdf
-      '@vasa/renderer':
-        specifier: workspace:*
-        version: link:../renderer
     devDependencies:
       '@types/node':
         specifier: ^25.5.0
@@ -912,7 +861,7 @@ importers:
 
   packages/extension-text:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -931,7 +880,7 @@ importers:
 
   packages/extension-text-style:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -950,7 +899,7 @@ importers:
 
   packages/extension-underline:
     dependencies:
-      '@vasa/core':
+      '@skriva/core':
         specifier: workspace:*
         version: link:../core
     devDependencies:
@@ -969,7 +918,7 @@ importers:
 
   packages/font:
     dependencies:
-      '@vasa/renderer':
+      '@skriva/renderer':
         specifier: workspace:*
         version: link:../renderer
       wawoff2:
@@ -1019,16 +968,28 @@ importers:
 
   packages/pdf:
     dependencies:
-      '@vasa/layout':
+      '@skriva/layout':
         specifier: workspace:*
         version: link:../layout
-      '@vasa/renderer':
+      '@skriva/renderer':
         specifier: workspace:*
         version: link:../renderer
       react-reconciler:
         specifier: 'catalog:'
         version: 0.33.0(react@19.2.4)
     devDependencies:
+      '@opeinspection/skriva':
+        specifier: workspace:*
+        version: link:../editor
+      '@skriva/canvas':
+        specifier: workspace:*
+        version: link:../canvas
+      '@skriva/extension-svg':
+        specifier: workspace:*
+        version: link:../extension-svg
+      '@skriva/render-test':
+        specifier: workspace:*
+        version: link:../render-test
       '@types/node':
         specifier: ^25.5.0
         version: 25.5.2
@@ -1038,18 +999,6 @@ importers:
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260328.1
         version: 7.0.0-dev.20260328.1
-      '@vasa/canvas':
-        specifier: workspace:*
-        version: link:../canvas
-      '@vasa/editor':
-        specifier: workspace:*
-        version: link:../editor
-      '@vasa/extension-svg':
-        specifier: workspace:*
-        version: link:../extension-svg
-      '@vasa/render-test':
-        specifier: workspace:*
-        version: link:../render-test
       bumpp:
         specifier: ^11.0.1
         version: 11.0.1
@@ -1068,13 +1017,13 @@ importers:
       '@napi-rs/canvas':
         specifier: 0.1.100
         version: 0.1.100
-      '@vasa/canvas':
+      '@skriva/canvas':
         specifier: workspace:*
         version: link:../canvas
-      '@vasa/layout':
+      '@skriva/layout':
         specifier: workspace:*
         version: link:../layout
-      '@vasa/renderer':
+      '@skriva/renderer':
         specifier: workspace:*
         version: link:../renderer
       pdfjs-dist:
@@ -1099,7 +1048,7 @@ importers:
 
   packages/renderer:
     dependencies:
-      '@vasa/layout':
+      '@skriva/layout':
         specifier: workspace:*
         version: link:../layout
       opentype.js:
@@ -1115,28 +1064,6 @@ importers:
       bumpp:
         specifier: ^11.0.1
         version: 11.0.1
-      typescript:
-        specifier: ^6.0.2
-        version: 6.0.2
-      vite-plus:
-        specifier: ^0.1.14
-        version: 0.1.15(@opentelemetry/api@1.9.0)(@types/node@25.5.2)(esbuild@0.27.3)(happy-dom@20.8.9)(jiti@2.6.1)(jsdom@28.1.0)(typescript@6.0.2)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@25.5.2)(esbuild@0.27.3)(jiti@2.6.1)(yaml@2.8.3))(yaml@2.8.3)
-
-  packages/webgl:
-    dependencies:
-      '@vasa/canvas':
-        specifier: workspace:*
-        version: link:../canvas
-      '@vasa/renderer':
-        specifier: workspace:*
-        version: link:../renderer
-    devDependencies:
-      '@types/node':
-        specifier: ^25.5.0
-        version: 25.5.2
-      '@typescript/native-preview':
-        specifier: 7.0.0-dev.20260328.1
-        version: 7.0.0-dev.20260328.1
       typescript:
         specifier: ^6.0.2
         version: 6.0.2

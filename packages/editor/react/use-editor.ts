@@ -1,16 +1,11 @@
-import { buildCanvasScene, createCanvasRenderer, type CanvasRendererExtension } from "@vasa/canvas";
-import {
-  collectExtensionRenderers,
-  collectLayoutExtensions,
-  collectRendererExtensions,
-  type VasaExtension,
-} from "@vasa/core";
+import { Canvas, type CanvasRendererExtension } from "@skriva/canvas";
+import { type Editor, type JSONContent, type SkrivaExtension } from "@skriva/core";
 import {
   createCanvasFontValue,
   type FontDescriptor,
   type FontSource,
-  type VasaFont,
-} from "@vasa/font";
+  type SkrivaFont,
+} from "@skriva/font";
 import {
   createPageGeometry,
   updatePageMarginGuide,
@@ -18,61 +13,55 @@ import {
   type LayoutOptions,
   type PageMarginGuide,
   type ResolvedBoxEdges,
-} from "@vasa/layout";
-import type { PdfRendererExtension } from "@vasa/pdf";
-import { createRenderDocument, type RenderDocument } from "@vasa/renderer";
-import { canUseWebGlRenderer, renderWebGlScene } from "@vasa/webgl";
+} from "@skriva/layout";
+import type { PdfRendererExtension } from "@skriva/pdf";
+import { type RenderDocument } from "@skriva/renderer";
 import { useEditor as useTiptapEditor, type UseEditorOptions } from "@tiptap/react";
-import { useEffect, useMemo, useRef, useState, type DependencyList } from "react";
 import {
-  createEditorParityDocument,
-  createEditorRenderDocument,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DependencyList,
+  type DragEvent,
+} from "react";
+import {
   createEditorRenderMeasureText,
   createEditorRenderTextMeasurer,
-  createEditorSession,
-  createBarebonesEditorExtensions,
-  applyEditorSessionMutation,
+  createSkrivaHeadlessRenderModel,
+  inspectSkrivaHeadlessRenderModel,
+  createSkrivaSurfaceAdapter,
+  createPlainTextClipboardAdapter,
+  createProjectSurfaceLineSelection,
+  createProjectSurfaceSelection,
+  createProjectSurfaceWordSelection,
+  createTextareaBrowserInputAdapter,
+  proseMirrorSelectionToSurfaceSelection,
   currentEditorTextStyleAttrs,
   currentTextBlockType,
-  deleteCurrentTable,
-  deleteCurrentTableColumn,
-  deleteCurrentTableRow,
+  defaultEditorExtensions,
   editorHeadingTextStyleAttrs,
   editorCodeFontDescriptor,
-  insertTableColumnAfter,
-  insertTableColumnBefore,
-  insertBlankTableAfterCurrentBlock,
-  insertHorizontalRuleAfterCurrentBlock,
-  insertPageBreakAtDocumentEnd,
-  insertTableRowAfter,
-  insertTableRowBefore,
   isSelectionExpanded,
   paintEditorCaret,
   paintEditorSelection,
-  setColor,
-  setCurrentTextBlockType,
-  setEditorSessionTextStyle,
-  setFontFamily,
-  setFontSize,
-  setLineHeight,
-  toggleCurrentBlockquote,
-  toggleBold,
-  toggleEditorSessionMark,
-  updateEditorSessionSelection,
-  type EditorJson,
+  type EditorMarkSpec,
   type EditorSelection,
-  type EditorSession,
+  pageBreakSpacerHeightForRemainingPage,
 } from "../src/index.ts";
 import { domCanvasSurface } from "../src/browser.ts";
 import type { EditorKeymap } from "./keymap.ts";
 import { useEditorFonts } from "./use-editor-fonts.ts";
-import { useEditorInput } from "./use-editor-input.ts";
-import { useEditorMovement } from "./use-editor-movement.ts";
+import { useEditorInput, type UseEditorInputOptions } from "./use-editor-input.ts";
+import { useEditorMovement, type UseEditorMovementOptions } from "./use-editor-movement.ts";
 
-export type EditorConfig = {
-  bundledFont: VasaFont;
+const EDITOR_ROOT_BLOCK_GAP = 14;
+
+export type SkrivaEditorConfig = {
+  bundledFont: SkrivaFont;
   bundledFontSource?: FontSource;
-  fallbackFont: VasaFont;
+  fallbackFont: SkrivaFont;
   fallbackFontSource?: FontSource;
   defaultFontId?: string;
   page: LayoutOptions["page"];
@@ -82,19 +71,19 @@ export type EditorConfig = {
   textFontSize: number;
   textLineHeight: number;
   lineHeightOptions?: number[];
-  document?: EditorJson;
+  document?: JSONContent;
   extensions?: Array<
-    VasaExtension<{
+    SkrivaExtension<{
       canvas: CanvasRendererExtension;
-      webgl: CanvasRendererExtension;
       pdf: PdfRendererExtension;
     }>
   >;
   extraChildren?: LayoutNode[];
   fontFamilies?: Array<string | FontDescriptor>;
+  controlledFontFamilies?: string[];
   fontSizeOptions: number[];
   initialColor?: string;
-  canvasTextMode?: "native" | "outline" | "webgl";
+  canvasTextMode?: "native" | "outline";
   canvasBitmapScale?: number;
   outlinePixelSnap?: number;
   pageBackground?: string;
@@ -103,31 +92,50 @@ export type EditorConfig = {
   multiClickIntervalMs?: number;
   multiClickMaxDistancePx?: number;
   keymap?: EditorKeymap;
+  surfaceDropHandlers?: SkrivaEditorSurfaceDropHandler[];
   tiptap?: UseEditorOptions;
   tiptapDeps?: DependencyList;
 };
 
-export type EditorProps = {
-  config: EditorConfig;
+export type SkrivaEditorProps = {
+  config: SkrivaEditorConfig;
 };
 
-export function useEditor({ config }: EditorProps) {
+export type SkrivaEditorSurfaceDropContext = {
+  focusEditor: () => void;
+};
+
+export type SkrivaEditorSurfaceDropHandler = {
+  canDrop: (event: DragEvent<HTMLElement>) => boolean;
+  drop: (
+    event: DragEvent<HTMLElement>,
+    context: SkrivaEditorSurfaceDropContext,
+  ) => boolean | Promise<boolean>;
+};
+
+export function useSkrivaEditor({ config }: SkrivaEditorProps) {
   const documentExtensions = config.extensions ?? [];
+  const initialEditorDocument = useMemo<JSONContent>(
+    () => config.document ?? createDefaultTiptapDocument(),
+    [config.document],
+  );
   const tiptapExtensions = useMemo(
-    () => [
-      ...createBarebonesEditorExtensions(),
-      ...documentExtensions.flatMap((extension) => extension.tiptap ?? []),
-      ...(config.tiptap?.extensions ?? []),
-    ],
+    () =>
+      uniqueTiptapExtensions([
+        ...defaultEditorExtensions.flatMap((extension) => extension.tiptap ?? []),
+        ...documentExtensions.flatMap((extension) => extension.tiptap ?? []),
+        ...(config.tiptap?.extensions ?? []),
+      ]),
     [config.tiptap?.extensions, documentExtensions],
   );
   const tiptapOptions = useMemo(
     () => ({
       immediatelyRender: false,
       ...config.tiptap,
+      content: config.tiptap?.content ?? initialEditorDocument,
       extensions: tiptapExtensions,
     }),
-    [config.tiptap, tiptapExtensions],
+    [config.tiptap, initialEditorDocument, tiptapExtensions],
   );
   const tiptapEditor = useTiptapEditor(tiptapOptions, config.tiptapDeps ?? []);
   const extraChildren = config.extraChildren ?? [];
@@ -143,16 +151,10 @@ export function useEditor({ config }: EditorProps) {
     }),
     [config.page.height, config.pageGap, config.textCharWidth],
   );
-  const [editorSession, setEditorSession] = useState<EditorSession>(() =>
-    createEditorSession({ doc: config.document ?? createEditorParityDocument() }),
-  );
-  const editorDocument = editorSession.doc;
-  const selection = editorSession.selection;
-  const storedMarks = editorSession.storedMarks;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const webGlTextCanvasRef = useRef<HTMLCanvasElement | undefined>(undefined);
-  const editorSessionRef = useRef(editorSession);
+  const [tiptapProjectionRevision, setTiptapProjectionRevision] = useState(0);
+  const tiptapProjectionFrameRef = useRef<number | undefined>(undefined);
   const fontChangeRequestRef = useRef(0);
   const marginDragRef = useRef<PageMarginGuide | undefined>(undefined);
   const editorFontFamilies = useMemo(
@@ -165,6 +167,7 @@ export function useEditor({ config }: EditorProps) {
     fallbackFont: config.fallbackFont,
     fallbackFontSource: config.fallbackFontSource,
     fontFamilies: editorFontFamilies,
+    controlledFontFamilies: config.controlledFontFamilies,
   });
   const [selectedColor, setSelectedColor] = useState(config.initialColor ?? "#2563eb");
   const defaultRenderFontId = config.defaultFontId ?? config.bundledFont.id;
@@ -177,13 +180,28 @@ export function useEditor({ config }: EditorProps) {
     (text: string, font?: string) => number
   >(() => (text: string) => text.length * config.textCharWidth);
   const [isEditorInputFocused, setIsEditorInputFocused] = useState(false);
-  const [supportsWebGlText, setSupportsWebGlText] = useState(false);
-  useEffect(() => {
-    setSupportsWebGlText(canUseWebGlRenderer());
-  }, []);
-  const canvasTextMode =
-    config.canvasTextMode === "webgl" && !supportsWebGlText ? "native" : config.canvasTextMode;
+  const canvasTextMode = config.canvasTextMode;
   const canvasBitmapScale = useCanvasBitmapScale(config.canvasBitmapScale ?? 1);
+  const tiptapProjection = useMemo(
+    () => createTiptapProjection(tiptapEditor, initialEditorDocument),
+    [initialEditorDocument, tiptapEditor, tiptapProjectionRevision],
+  );
+  const scheduleTiptapProjectionSync = useCallback(() => {
+    if (typeof window === "undefined") {
+      setTiptapProjectionRevision((revision) => revision + 1);
+      return;
+    }
+    if (tiptapProjectionFrameRef.current !== undefined) return;
+
+    tiptapProjectionFrameRef.current = window.requestAnimationFrame(() => {
+      tiptapProjectionFrameRef.current = undefined;
+      setTiptapProjectionRevision((revision) => revision + 1);
+    });
+  }, []);
+  const editorDocument = tiptapProjection.document;
+  const selection = tiptapProjection.selection;
+  const storedMarks = tiptapProjection.storedMarks;
+  const disabledMarks = tiptapProjection.disabledMarks;
   const editorCanvasFont = useMemo(
     () => createCanvasFontValue(defaultRenderFont, { fontSize: config.textFontSize }),
     [defaultRenderFont, config.textFontSize],
@@ -193,6 +211,7 @@ export function useEditor({ config }: EditorProps) {
       fonts: editorFonts.fonts,
       defaultFontId: defaultRenderFont.id,
       fallbackFont: config.fallbackFont,
+      fontCatalog: editorFonts.fontCatalog,
       fontSize: config.textFontSize,
       lineHeight: config.textLineHeight,
       outlinePixelSnap: config.outlinePixelSnap,
@@ -202,6 +221,7 @@ export function useEditor({ config }: EditorProps) {
     }),
     [
       config.fallbackFont,
+      editorFonts.fontCatalog,
       config.textFontSize,
       config.textLineHeight,
       config.outlinePixelSnap,
@@ -219,11 +239,17 @@ export function useEditor({ config }: EditorProps) {
     [editorMeasureText, editorRenderProfile],
   );
   const currentTextStyleAttrs = useMemo(
-    () => currentEditorTextStyleAttrs(editorDocument, selection, storedMarks),
+    () =>
+      currentEditorTextStyleAttrs(
+        editorDocument as Parameters<typeof currentEditorTextStyleAttrs>[0],
+        selection,
+        storedMarks,
+      ),
     [editorDocument, selection, storedMarks],
   );
   const currentTextBlock = useMemo(
-    () => currentTextBlockType(editorDocument, selection),
+    () =>
+      currentTextBlockType(editorDocument as Parameters<typeof currentTextBlockType>[0], selection),
     [editorDocument, selection],
   );
   const selectedRenderFont =
@@ -234,10 +260,11 @@ export function useEditor({ config }: EditorProps) {
     () => collectEditorDocumentFontIds(editorDocument),
     [editorDocument],
   );
+  const documentFontIdsKey = documentFontIds.join("\u0000");
   useEffect(() => {
     void editorFonts.ensureFontLoaded(selectedRenderFont.id);
     for (const fontId of documentFontIds) void editorFonts.ensureFontLoaded(fontId);
-  }, [documentFontIds, editorFonts.ensureFontLoaded, selectedRenderFont.id]);
+  }, [documentFontIdsKey, editorFonts.ensureFontLoaded, selectedRenderFont.id]);
   const selectedFontSize =
     currentTextStyleAttrs.fontSize ??
     (currentTextBlock.type === "heading"
@@ -247,17 +274,15 @@ export function useEditor({ config }: EditorProps) {
   const shouldPaintSelection = isEditorInputFocused || isSelectionExpanded(selection);
   const editorRenderContract = useMemo(
     () =>
-      createEditorRenderDocument({
-        doc: editorDocument,
+      createSkrivaHeadlessRenderModel({
+        logicLayer: tiptapEditor ?? createStaticLogicLayer(editorDocument),
         page: config.page,
         measurer: editorTextMeasurer,
         profile: editorRenderProfile,
-        rootStyle: { gap: 14 },
+        enrichments: documentExtensions,
+        rootStyle: { gap: EDITOR_ROOT_BLOCK_GAP },
         paragraphStyle: { flexDirection: "column" },
         extraChildren,
-        layoutExtensions: collectLayoutExtensions(documentExtensions),
-        rendererExtensions: collectRendererExtensions(documentExtensions),
-        createRenderDocument,
       }),
     [
       config.page,
@@ -266,55 +291,49 @@ export function useEditor({ config }: EditorProps) {
       editorRenderProfile,
       editorTextMeasurer,
       extraChildren,
+      tiptapEditor,
     ],
   );
-  const layoutTree = editorRenderContract.layoutTree;
-  const renderDocument = editorRenderContract.renderDocument;
-  const canvasRenderers = useMemo(
-    () => collectExtensionRenderers(documentExtensions, "canvas"),
-    [],
+  const editorRenderInspection = useMemo(
+    () => inspectSkrivaHeadlessRenderModel(editorRenderContract),
+    [editorRenderContract],
   );
-  const preferredCanvasSceneRenderers = useMemo(
-    () =>
-      canvasTextMode === "webgl"
-        ? preferredExtensionRenderers(documentExtensions, "webgl", "canvas")
-        : canvasRenderers,
-    [canvasRenderers, canvasTextMode, documentExtensions],
-  );
-  const webGlTextPaint = useMemo(() => {
-    if (canvasTextMode !== "webgl") return editorRenderContract.canvasTextPaint;
-
-    return (...args: Parameters<typeof editorRenderContract.canvasTextPaint>) => {
-      const paint = editorRenderContract.canvasTextPaint(...args);
-      return {
-        ...paint,
-        pixelSnap: config.outlinePixelSnap ?? 1,
-      };
-    };
-  }, [canvasTextMode, config.outlinePixelSnap, editorRenderContract.canvasTextPaint]);
+  const renderDocument = editorRenderInspection.documentSceneGraph;
+  const canvasRenderers = editorRenderInspection.canvasRenderers;
   const canvasScene = useMemo(
-    () =>
-      buildCanvasScene(renderDocument, {
-        pageGap: config.pageGap,
-        extensions: preferredCanvasSceneRenderers,
-        text: webGlTextPaint,
-      }),
-    [config.pageGap, preferredCanvasSceneRenderers, renderDocument, webGlTextPaint],
+    () => editorRenderContract.createCanvasScene({ pageGap: config.pageGap }),
+    [config.pageGap, editorRenderContract],
   );
   const canvasTextPaint = useMemo(() => {
-    if (canvasTextMode !== "native" && canvasTextMode !== "webgl")
-      return editorRenderContract.canvasTextPaint;
+    if (canvasTextMode !== "native") return editorRenderInspection.canvasTextPaint;
 
-    return (...args: Parameters<typeof editorRenderContract.canvasTextPaint>) => {
-      const paint = editorRenderContract.canvasTextPaint(...args);
+    return (...args: Parameters<typeof editorRenderInspection.canvasTextPaint>) => {
+      const paint = editorRenderInspection.canvasTextPaint(...args);
       return {
         ...paint,
-        fill: canvasTextMode === "webgl" ? "rgb(0 0 0 / 0)" : paint.fill,
         outlineFont: undefined,
         pixelSnap: config.outlinePixelSnap ?? 1,
       };
     };
-  }, [canvasTextMode, config.outlinePixelSnap, editorRenderContract.canvasTextPaint]);
+  }, [canvasTextMode, config.outlinePixelSnap, editorRenderInspection.canvasTextPaint]);
+  const clipboardAdapter = useMemo(() => createPlainTextClipboardAdapter(), []);
+  const browserInputAdapter = useMemo(
+    () => createTextareaBrowserInputAdapter({ input: () => inputRef.current }),
+    [],
+  );
+  const surfaceAdapter = useMemo(
+    () =>
+      tiptapEditor === null
+        ? undefined
+        : createSkrivaSurfaceAdapter({
+            editor: tiptapEditor,
+            clipboard: clipboardAdapter,
+            projectSelection: createProjectSurfaceSelection(tiptapEditor),
+            projectWordSelection: createProjectSurfaceWordSelection(tiptapEditor),
+            projectLineSelection: createProjectSurfaceLineSelection(tiptapEditor),
+          }),
+    [clipboardAdapter, tiptapEditor],
+  );
   const showPageMarginGuides = config.showPageMarginGuides ?? true;
   useEffect(() => {
     const canvas = document.createElement("canvas");
@@ -327,6 +346,30 @@ export function useEditor({ config }: EditorProps) {
       return context.measureText(text).width;
     });
   }, [editorCanvasFont]);
+
+  useEffect(() => {
+    if (tiptapEditor === null) return;
+
+    const syncSessionFromTiptap = () => {
+      scheduleTiptapProjectionSync();
+    };
+
+    tiptapEditor.on("update", syncSessionFromTiptap);
+    tiptapEditor.on("selectionUpdate", syncSessionFromTiptap);
+    return () => {
+      tiptapEditor.off("update", syncSessionFromTiptap);
+      tiptapEditor.off("selectionUpdate", syncSessionFromTiptap);
+    };
+  }, [scheduleTiptapProjectionSync, tiptapEditor]);
+
+  useEffect(
+    () => () => {
+      const frame = tiptapProjectionFrameRef.current;
+      if (frame === undefined || typeof window === "undefined") return;
+      window.cancelAnimationFrame(frame);
+    },
+    [],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -350,38 +393,12 @@ export function useEditor({ config }: EditorProps) {
     canvas.style.height = `${height}px`;
 
     context.setTransform(scale, 0, 0, scale, 0, 0);
-    createCanvasRenderer(domCanvasSurface(context, editorCanvasFont), {
+    Canvas(domCanvasSurface(context, editorCanvasFont), {
       pageBackground,
       pageGap: config.pageGap,
       extensions: canvasRenderers,
       text: canvasTextPaint,
     }).render(renderDocument);
-    if (canvasTextMode === "webgl") {
-      const webGlTextCanvas = webGlTextCanvasRef.current ?? document.createElement("canvas");
-      webGlTextCanvasRef.current = webGlTextCanvas;
-      webGlTextCanvas.width = canvas.width;
-      webGlTextCanvas.height = canvas.height;
-
-      const webGlResult = renderWebGlScene(webGlTextCanvas, canvasScene, {
-        pixelRatio: scale,
-      });
-      if (webGlResult !== false && webGlResult.didRenderText) {
-        context.save();
-        context.setTransform(1, 0, 0, 1, 0, 0);
-        context.drawImage(webGlTextCanvas, 0, 0);
-        context.restore();
-      } else {
-        createCanvasRenderer(textOnlyCanvasSurface(context, editorCanvasFont), {
-          pageBackground: "rgb(0 0 0 / 0)",
-          pageGap: config.pageGap,
-          extensions: canvasRenderers,
-          text: (...args: Parameters<typeof editorRenderContract.canvasTextPaint>) => {
-            const paint = editorRenderContract.canvasTextPaint(...args);
-            return { ...paint, outlineFont: undefined, pixelSnap: config.outlinePixelSnap ?? 1 };
-          },
-        }).render(renderDocument);
-      }
-    }
     if (showPageMarginGuides) {
       paintPageMarginGuides(context, renderDocument, config.pageGap, scale);
     }
@@ -414,7 +431,6 @@ export function useEditor({ config }: EditorProps) {
     canvasRenderers,
     canvasBitmapScale,
     canvasTextPaint,
-    canvasTextMode,
     editorCanvasFont,
     editorRenderMeasureText,
     isEditorInputFocused,
@@ -429,120 +445,68 @@ export function useEditor({ config }: EditorProps) {
   function updateSelectedFont(fontId: string) {
     const requestId = fontChangeRequestRef.current + 1;
     fontChangeRequestRef.current = requestId;
-    const requestedSelection = editorSessionRef.current.selection;
-    const requestedStoredMarks = editorSessionRef.current.storedMarks;
     editorFonts.setSelectedFontId(fontId);
     void editorFonts.ensureFontLoaded(fontId).then(() => {
       if (fontChangeRequestRef.current !== requestId) return;
-
-      updateEditor((session) => {
-        const sessionAtRequest = {
-          ...session,
-          selection: requestedSelection,
-          storedMarks: requestedStoredMarks,
-        };
-        const styledSession = setEditorSessionTextStyle(
-          sessionAtRequest,
-          { fontId },
-          (doc, currentSelection) => setFontFamily(doc, currentSelection, fontId),
-        );
-        if (!isSelectionExpanded(requestedSelection)) return styledSession;
-        return {
-          ...styledSession,
-          selection: session.selection,
-          storedMarks: session.storedMarks,
-        };
-      });
+      runTiptapCommand("setFontFamily", fontId);
     });
     focusKeyboardBridge();
   }
 
   function updateSelectedFontSize(fontSize: number) {
-    updateEditor((session) =>
-      setEditorSessionTextStyle(session, { fontSize }, (doc, currentSelection) =>
-        setFontSize(doc, currentSelection, fontSize),
-      ),
-    );
+    runTiptapCommand("setFontSize", fontSize);
     focusKeyboardBridge();
   }
 
   function updateSelectedLineHeight(lineHeight: number) {
-    updateEditor((session) =>
-      setEditorSessionTextStyle(session, { lineHeight }, (doc, currentSelection) =>
-        setLineHeight(doc, currentSelection, lineHeight),
-      ),
-    );
+    runTiptapCommand("setLineHeight", lineHeight);
     focusKeyboardBridge();
   }
 
   function toggleSelectedBold() {
-    toggleSelectedMark("bold", toggleBold);
+    toggleSelectedMark("bold", (doc, currentSelection) => ({ doc, selection: currentSelection }));
   }
 
-  function toggleSelectedMark(
-    type: string,
-    mutate: (
-      doc: EditorJson,
-      currentSelection: EditorSelection,
-    ) => {
-      doc: EditorJson;
-      selection: EditorSelection;
-    },
-    attrs: Record<string, unknown> = {},
-  ) {
-    updateEditor((session) => toggleEditorSessionMark(session, { type, attrs }, mutate));
+  const toggleSelectedMark: UseEditorInputOptions["toggleMark"] = (type, mutate, attrs = {}) => {
+    void mutate;
+    const commandName = toggleMarkCommandName(type);
+    if (commandName !== undefined) {
+      if (Object.keys(attrs).length === 0) {
+        runTiptapCommand(commandName);
+      } else {
+        runTiptapCommand(commandName, attrs);
+      }
+    }
     focusKeyboardBridge();
-  }
+  };
 
   function updateSelectedColor(color: string) {
     setSelectedColor(color);
-    updateEditor((session) =>
-      setEditorSessionTextStyle(session, { color }, (doc, currentSelection) =>
-        setColor(doc, currentSelection, color),
-      ),
-    );
+    runTiptapCommand("setColor", color);
     focusKeyboardBridge();
   }
 
   function updateSelectedBlockStyle(style: "paragraph" | "heading-1" | "heading-2" | "heading-3") {
-    updateEditor((session) =>
-      applyEditorSessionMutation(session, (doc, currentSelection) => {
-        if (style === "paragraph") {
-          return setCurrentTextBlockType(doc, currentSelection, "paragraph");
-        }
-
-        return setCurrentTextBlockType(doc, currentSelection, "heading", {
-          level: Number(style.at(-1)),
-        });
-      }),
-    );
+    if (style === "paragraph") {
+      runTiptapCommand("setParagraph");
+    } else {
+      runTiptapCommand("setHeading", { level: Number(style.at(-1)) });
+    }
     focusKeyboardBridge();
   }
 
   function toggleSelectedBlockquote() {
-    updateEditor((session) =>
-      applyEditorSessionMutation(session, (doc, currentSelection) =>
-        toggleCurrentBlockquote(doc, currentSelection),
-      ),
-    );
+    runTiptapCommand("toggleBlockquote");
     focusKeyboardBridge();
   }
 
   function insertHorizontalRule() {
-    updateEditor((session) =>
-      applyEditorSessionMutation(session, (doc, currentSelection) =>
-        insertHorizontalRuleAfterCurrentBlock(doc, currentSelection),
-      ),
-    );
+    runTiptapCommand("setHorizontalRule");
     focusKeyboardBridge();
   }
 
   function insertBlankTable() {
-    updateEditor((session) =>
-      applyEditorSessionMutation(session, (doc, currentSelection) =>
-        insertBlankTableAfterCurrentBlock(doc, currentSelection),
-      ),
-    );
+    runTiptapCommand("insertTable", { rows: 4, cols: 3, withHeaderRow: false });
     focusKeyboardBridge();
   }
 
@@ -552,37 +516,31 @@ export function useEditor({ config }: EditorProps) {
       currentPage === undefined
         ? config.page.height
         : currentPage.content.y + currentPage.content.height - lastPageContentBottomY(currentPage);
-
-    updateEditor((session) => {
-      return applyEditorSessionMutation(session, (doc, currentSelection) => {
-        const fontId = currentEditorTextStyleAttrs(
-          doc,
-          currentSelection,
-          session.storedMarks,
-        ).fontId;
-
-        return insertPageBreakAtDocumentEnd(
-          doc,
-          Math.max(config.textLineHeight, remainingHeight + config.textLineHeight),
-          fontId === undefined ? {} : { fontId },
-        );
-      });
+    const spacerHeight = pageBreakSpacerHeightForRemainingPage({
+      remainingHeight,
+      precedingBlockGap:
+        currentPage === undefined || currentPage.nodes.length === 0 ? 0 : EDITOR_ROOT_BLOCK_GAP,
     });
+
+    const fontId = currentTextStyleAttrs.fontId;
+    runTiptapCommand("insertPageBreak", { spacerHeight });
+    if (fontId !== undefined) runTiptapCommand("setFontFamily", fontId);
     focusKeyboardBridge();
   }
 
-  function mutateSelectedTable(
-    mutate: (
-      doc: EditorJson,
-      currentSelection: EditorSelection,
-    ) => {
-      doc: EditorJson;
-      selection: EditorSelection;
-    },
-  ) {
-    updateEditor((session) =>
-      applyEditorSessionMutation(session, (doc, currentSelection) => mutate(doc, currentSelection)),
-    );
+  function runTiptapCommand(commandName: string, ...args: unknown[]) {
+    const chain = tiptapEditor?.chain().focus() as unknown as
+      | (Record<string, (...commandArgs: unknown[]) => { run: () => boolean }> & {
+          run: () => boolean;
+        })
+      | undefined;
+    const command = chain?.[commandName];
+    if (command === undefined) return false;
+    return command(...args).run();
+  }
+
+  function runTiptapTableCommand(commandName: string) {
+    runTiptapCommand(commandName);
     focusKeyboardBridge();
   }
 
@@ -598,31 +556,29 @@ export function useEditor({ config }: EditorProps) {
     setIsEditorInputFocused(false);
   }
 
-  function updateEditor(update: (session: EditorSession) => EditorSession) {
-    const next = update(editorSessionRef.current);
-    editorSessionRef.current = next;
-    if (inputRef.current !== null) inputRef.current.value = "";
-    setEditorSession(next);
-  }
-
   function updateSelection(
     nextSelection: EditorSelection | ((currentSelection: EditorSelection) => EditorSelection),
   ) {
-    const resolved =
-      typeof nextSelection === "function"
-        ? nextSelection(editorSessionRef.current.selection)
-        : nextSelection;
-    updateEditor((session) => updateEditorSessionSelection(session, resolved));
+    const resolved = typeof nextSelection === "function" ? nextSelection(selection) : nextSelection;
+    if (inputRef.current !== null) inputRef.current.value = "";
+    if (resolved.anchor !== undefined) {
+      surfaceAdapter?.placeSelectionAt(resolved.anchor);
+      surfaceAdapter?.extendSelectionTo(resolved);
+    } else {
+      surfaceAdapter?.placeSelectionAt(resolved);
+    }
+    scheduleTiptapProjectionSync();
   }
 
   const movement = useEditorMovement({
     canvasRef,
-    editorDocument,
+    editorDocument: editorDocument as UseEditorMovementOptions["editorDocument"],
     renderDocument,
     renderLineOptions: editorRenderLineOptions,
     measureText: editorRenderMeasureText,
-    currentSelection: () => editorSessionRef.current.selection,
+    currentSelection: () => selection,
     updateSelection,
+    surfaceAdapter,
     focusKeyboardBridge,
     multiClickIntervalMs,
     multiClickMaxDistancePx,
@@ -656,6 +612,26 @@ export function useEditor({ config }: EditorProps) {
   function handleCanvasPointerUp(event: Parameters<typeof movement.handleCanvasPointerUp>[0]) {
     marginDragRef.current = undefined;
     movement.handleCanvasPointerUp(event);
+  }
+
+  function handleSurfaceDragOver(event: DragEvent<HTMLElement>) {
+    if (!surfaceDropHandlersCanDrop(config.surfaceDropHandlers, event)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+  }
+
+  async function handleSurfaceDrop(event: DragEvent<HTMLElement>) {
+    const handlers = config.surfaceDropHandlers?.filter((handler) => handler.canDrop(event)) ?? [];
+    if (handlers.length === 0) return;
+
+    event.preventDefault();
+    for (const handler of handlers) {
+      const handled = await handler.drop(event, { focusEditor: focusKeyboardBridge });
+      if (handled) {
+        focusKeyboardBridge();
+        return;
+      }
+    }
   }
 
   function marginGuideAtPointer(event: Parameters<typeof movement.handleCanvasPointerDown>[0]) {
@@ -698,24 +674,24 @@ export function useEditor({ config }: EditorProps) {
   }
 
   const input = useEditorInput({
-    editorDocument,
-    editorSessionRef,
+    editorDocument: editorDocument as UseEditorInputOptions["editorDocument"],
     keymap: config.keymap,
     measureText: editorRenderMeasureText,
     renderDocument,
     renderLineOptions: editorRenderLineOptions,
     suppressedBeforeInputRef,
-    updateEditor,
+    browserInput: browserInputAdapter,
+    surfaceAdapter,
     updateSelection,
     toggleBold: toggleSelectedBold,
     toggleMark: toggleSelectedMark,
     toggleBlockquote: toggleSelectedBlockquote,
     setBlockType: (type, attrs = {}) => {
-      updateEditor((session) =>
-        applyEditorSessionMutation(session, (doc, currentSelection) =>
-          setCurrentTextBlockType(doc, currentSelection, type, attrs),
-        ),
-      );
+      if (type === "paragraph") {
+        runTiptapCommand("setParagraph");
+      } else {
+        runTiptapCommand("setHeading", attrs);
+      }
       focusKeyboardBridge();
     },
   });
@@ -728,8 +704,7 @@ export function useEditor({ config }: EditorProps) {
     canvasSelection: selection,
     cursorPosition: selection,
     editorDocument,
-    editorSession,
-    disabledMarks: editorSession.disabledMarks,
+    disabledMarks,
     fonts: editorFonts.fonts,
     hasActiveOutlineFont: selectedRenderFont.outlineFont !== undefined,
     isFontReady: editorFonts.isReady,
@@ -745,9 +720,10 @@ export function useEditor({ config }: EditorProps) {
     handleKeyboardBridgeBlur: blurKeyboardBridge,
     handleKeyboardBridgeFocus: () => setIsEditorInputFocused(true),
     handlePaste: input.handlePaste,
+    handleSurfaceDragOver,
+    handleSurfaceDrop,
     inputRef,
-    layoutTree,
-    outlineText: editorRenderContract.pdfOutlineText,
+    renderModel: editorRenderContract,
     renderDocument,
     renderLineOptions: editorRenderLineOptions,
     textMeasurer: editorTextMeasurer,
@@ -764,13 +740,13 @@ export function useEditor({ config }: EditorProps) {
     insertHorizontalRule,
     insertBlankTable,
     insertPageBreak,
-    insertTableColumnAfter: () => mutateSelectedTable(insertTableColumnAfter),
-    insertTableColumnBefore: () => mutateSelectedTable(insertTableColumnBefore),
-    insertTableRowAfter: () => mutateSelectedTable(insertTableRowAfter),
-    insertTableRowBefore: () => mutateSelectedTable(insertTableRowBefore),
-    deleteCurrentTable: () => mutateSelectedTable(deleteCurrentTable),
-    deleteCurrentTableColumn: () => mutateSelectedTable(deleteCurrentTableColumn),
-    deleteCurrentTableRow: () => mutateSelectedTable(deleteCurrentTableRow),
+    insertTableColumnAfter: () => runTiptapTableCommand("addColumnAfter"),
+    insertTableColumnBefore: () => runTiptapTableCommand("addColumnBefore"),
+    insertTableRowAfter: () => runTiptapTableCommand("addRowAfter"),
+    insertTableRowBefore: () => runTiptapTableCommand("addRowBefore"),
+    deleteCurrentTable: () => runTiptapTableCommand("deleteTable"),
+    deleteCurrentTableColumn: () => runTiptapTableCommand("deleteColumn"),
+    deleteCurrentTableRow: () => runTiptapTableCommand("deleteRow"),
     toggleSelectedBold,
     toggleSelectedBlockquote,
     toggleSelectedMark,
@@ -782,40 +758,27 @@ export function useEditor({ config }: EditorProps) {
   };
 }
 
-export type UseEditorReturn = ReturnType<typeof useEditor>;
+export type UseSkrivaEditorReturn = ReturnType<typeof useSkrivaEditor>;
 
-function collectEditorDocumentFontIds(doc: EditorJson): string[] {
+function surfaceDropHandlersCanDrop(
+  handlers: SkrivaEditorSurfaceDropHandler[] | undefined,
+  event: DragEvent<HTMLElement>,
+) {
+  return handlers?.some((handler) => handler.canDrop(event)) ?? false;
+}
+
+function collectEditorDocumentFontIds(doc: JSONContent): string[] {
   const fontIds = new Set<string>();
   collectEditorNodeFontIds(doc, fontIds);
   return [...fontIds].sort();
 }
 
-function collectEditorNodeFontIds(node: EditorJson, fontIds: Set<string>) {
+function collectEditorNodeFontIds(node: JSONContent, fontIds: Set<string>) {
   for (const mark of node.marks ?? []) {
     const fontId = mark.attrs?.fontId;
     if (typeof fontId === "string") fontIds.add(fontId);
   }
   for (const child of node.content ?? []) collectEditorNodeFontIds(child, fontIds);
-}
-
-function textOnlyCanvasSurface(
-  context: CanvasRenderingContext2D,
-  defaultFont: string,
-): ReturnType<typeof domCanvasSurface> {
-  const surface = domCanvasSurface(context, defaultFont);
-  return {
-    ...surface,
-    clearRect: () => undefined,
-    fillRect: () => undefined,
-    strokeRect: () => undefined,
-    beginPath: () => undefined,
-    moveTo: () => undefined,
-    lineTo: () => undefined,
-    bezierCurveTo: () => undefined,
-    closePath: () => undefined,
-    fill: () => undefined,
-    stroke: () => undefined,
-  };
 }
 
 function canvasPointForEvent(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
@@ -833,7 +796,7 @@ function pageIndexAtY(y: number, pageHeight: number, pageGap: number) {
   return Math.max(0, Math.floor(y / (pageHeight + pageGap)));
 }
 
-function baseLineHeightScale(config: EditorConfig) {
+function baseLineHeightScale(config: SkrivaEditorConfig) {
   return config.textLineHeight / config.textFontSize;
 }
 
@@ -843,20 +806,107 @@ function normalizeLineHeightOptions(options: number[] | undefined, selectedLineH
     .sort((left, right) => left - right);
 }
 
-function preferredExtensionRenderers<
-  TRenderers extends Record<string, unknown>,
-  TPreferred extends keyof TRenderers,
-  TFallback extends keyof TRenderers,
->(
-  extensions: Array<VasaExtension<TRenderers>>,
-  preferred: TPreferred,
-  fallback: TFallback,
-): Array<TRenderers[TPreferred] | TRenderers[TFallback]> {
-  return extensions.flatMap((extension) => {
-    const renderer = extension.renderers?.[preferred] ?? extension.renderers?.[fallback];
-    if (renderer === undefined) return [];
-    return Array.isArray(renderer) ? renderer : [renderer];
+function toggleMarkCommandName(type: string) {
+  const commands: Record<string, string> = {
+    bold: "toggleBold",
+    italic: "toggleItalic",
+    underline: "toggleUnderline",
+    strike: "toggleStrike",
+    code: "toggleCode",
+    highlight: "toggleHighlight",
+    subscript: "toggleSubscript",
+    superscript: "toggleSuperscript",
+  };
+
+  return commands[type];
+}
+
+function uniqueTiptapExtensions(extensions: NonNullable<UseEditorOptions["extensions"]>) {
+  const seen = new Set<string>();
+  return extensions.filter((extension) => {
+    const name = extension.name;
+    if (seen.has(name)) return false;
+    seen.add(name);
+    return true;
   });
+}
+
+type TiptapProjection = {
+  document: JSONContent;
+  selection: EditorSelection;
+  storedMarks: EditorMarkSpec[];
+  disabledMarks: string[];
+};
+
+function createTiptapProjection(
+  editor: Editor | null,
+  fallbackDocument: JSONContent,
+): TiptapProjection {
+  if (editor === null) {
+    return {
+      document: fallbackDocument,
+      selection: { path: [0, 0], offset: 0 },
+      storedMarks: [],
+      disabledMarks: [],
+    };
+  }
+
+  return {
+    document: editor.getJSON(),
+    selection: proseMirrorSelectionToSurfaceSelection(editor.state.selection) ?? {
+      path: [0, 0],
+      offset: 0,
+    },
+    storedMarks: proseMirrorMarksToEditorMarks(editor.state.storedMarks ?? []),
+    disabledMarks: [],
+  };
+}
+
+function proseMirrorMarksToEditorMarks(marks: readonly unknown[]): EditorMarkSpec[] {
+  return marks.flatMap((mark) => {
+    const type = (mark as { type?: { name?: unknown } }).type?.name;
+    if (typeof type !== "string") return [];
+
+    const attrs = (mark as { attrs?: unknown }).attrs;
+    return [
+      {
+        type,
+        ...(isRecord(attrs) && Object.keys(attrs).length > 0 ? { attrs } : {}),
+      },
+    ];
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function createStaticLogicLayer(document: JSONContent) {
+  return {
+    getJSON: () => document,
+  };
+}
+
+function createDefaultTiptapDocument(): JSONContent {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "heading",
+        attrs: { level: 1 },
+        content: [{ type: "text", text: "Skriva" }],
+      },
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "Deterministic paginated rendering for Tiptap state.",
+          },
+        ],
+      },
+    ],
+  };
 }
 
 function renderNodeBottomY(node: unknown): number {

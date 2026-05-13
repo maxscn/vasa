@@ -1,5 +1,40 @@
-import { parseTextOutlineFont, type TextOutlineFont } from "@vasa/renderer";
+import { parseTextOutlineFont, type TextOutlineFont } from "@skriva/renderer";
 import type { Wawoff2DecompressBinding } from "wawoff2/build/decompress_binding.js";
+import {
+  CSS_PIXEL_PRECISION,
+  DECORATION_THICKNESS_RATIO,
+  DEFAULT_FALLBACK_FAMILIES,
+  DEFAULT_FONT_STYLE,
+  DEFAULT_FONT_WEIGHT,
+  DEFAULT_SCRIPT_SCALE,
+  DEGREES_PER_HALF_TURN,
+  LINE_THROUGH_OFFSET_RATIO,
+  METRIC_THICKNESS_RATIO,
+  MIN_FONT_SIZE,
+  SCRIPT_ASCENDER_ALIGNMENT_RATIO,
+  SCRIPT_ASCENDER_MAX_RATIO,
+  SCRIPT_ASCENDER_MIN_RATIO,
+  STRIKEOUT_POSITION_RATIO,
+  SUBSCRIPT_BASELINE_RATIO,
+  SUPERSCRIPT_BASELINE_RATIO,
+  UNDERLINE_POSITION_RATIO,
+  WOFF2_SIGNATURE,
+} from "./constants.js";
+import { googleFontManifest } from "./google-font-manifest.js";
+
+export {
+  createFontCatalog,
+  IncompleteControlledFontFamilyError,
+  MissingFontFaceError,
+  type CreateFontCatalogOptions,
+  type FontCatalog,
+  type FontFaceRequest,
+} from "./catalog.js";
+export {
+  googleFontManifest,
+  type GoogleFontFaceManifestEntry,
+  type GoogleFontFamilyManifestEntry,
+} from "./google-font-manifest.js";
 
 export type FontSource =
   | Uint8Array
@@ -13,13 +48,13 @@ export type FontDescriptor = {
   displayName?: string;
   source?: FontSource;
   runtimeSource?: FontSource;
-  metrics?: VasaFontMetrics;
+  metrics?: SkrivaFontMetrics;
   weight?: string | number;
   style?: string;
   fallbackFamilies?: string[];
 };
 
-export type VasaFontMetrics = {
+export type SkrivaFontMetrics = {
   unitsPerEm: number;
   ascender: number;
   descender: number;
@@ -37,19 +72,19 @@ export type VasaFontMetrics = {
   capHeight?: number;
 };
 
-export type VasaFontFaceData =
+export type SkrivaFontFaceData =
   | {
       kind: "outline";
       bytes: Uint8Array;
-      metrics: VasaFontMetrics;
+      metrics: SkrivaFontMetrics;
       outlineFont: TextOutlineFont;
     }
   | {
       kind: "native";
-      metrics?: VasaFontMetrics;
+      metrics?: SkrivaFontMetrics;
     };
 
-export type VasaFont = {
+export type SkrivaFont = {
   id: string;
   family: string;
   displayName: string;
@@ -57,7 +92,7 @@ export type VasaFont = {
   style: string;
   fallbackFamilies: string[];
   cssFamily: string;
-  data: VasaFontFaceData;
+  data: SkrivaFontFaceData;
   outlineFont?: TextOutlineFont;
 };
 
@@ -74,9 +109,9 @@ export type FontTextDecorationStyle = {
 };
 
 export type FontRegistry = {
-  register(descriptor: FontDescriptor): Promise<VasaFont>;
-  list(): VasaFont[];
-  get(id: string): VasaFont | undefined;
+  register(descriptor: FontDescriptor): Promise<SkrivaFont>;
+  list(): SkrivaFont[];
+  get(id: string): SkrivaFont | undefined;
 };
 
 export type GoogleFontDescriptorOptions = {
@@ -108,7 +143,7 @@ export type CreateFontRegistryOptions = {
   fontSet?: RuntimeFontSet;
 };
 
-const STANDARD_SANS_METRICS: VasaFontMetrics = {
+const STANDARD_SANS_METRICS: SkrivaFontMetrics = {
   unitsPerEm: 2048,
   ascender: 1854,
   descender: -434,
@@ -126,7 +161,7 @@ const STANDARD_SANS_METRICS: VasaFontMetrics = {
   capHeight: 1409,
 };
 
-const STANDARD_SERIF_METRICS: VasaFontMetrics = {
+const STANDARD_SERIF_METRICS: SkrivaFontMetrics = {
   unitsPerEm: 2048,
   ascender: 1825,
   descender: -443,
@@ -144,7 +179,7 @@ const STANDARD_SERIF_METRICS: VasaFontMetrics = {
   capHeight: 1356,
 };
 
-const STANDARD_MONO_METRICS: VasaFontMetrics = {
+const STANDARD_MONO_METRICS: SkrivaFontMetrics = {
   unitsPerEm: 2048,
   ascender: 1705,
   descender: -615,
@@ -163,14 +198,14 @@ const STANDARD_MONO_METRICS: VasaFontMetrics = {
 };
 
 export function createFontRegistry(options: CreateFontRegistryOptions = {}): FontRegistry {
-  const fonts = new Map<string, VasaFont>();
+  const fonts = new Map<string, SkrivaFont>();
 
   return {
     async register(descriptor) {
       const id = descriptor.id ?? fontIdFromFamily(descriptor.family, fonts.size);
-      const weight = String(descriptor.weight ?? "400");
-      const style = descriptor.style ?? "normal";
-      const fallbackFamilies = descriptor.fallbackFamilies ?? ["Arial", "sans-serif"];
+      const weight = String(descriptor.weight ?? DEFAULT_FONT_WEIGHT);
+      const style = descriptor.style ?? DEFAULT_FONT_STYLE;
+      const fallbackFamilies = descriptor.fallbackFamilies ?? [...DEFAULT_FALLBACK_FAMILIES];
       const cssFamily = createCssFontFamily(descriptor.family, fallbackFamilies);
       const bytes = await resolveFontBytes(descriptor.source);
 
@@ -188,7 +223,7 @@ export function createFontRegistry(options: CreateFontRegistryOptions = {}): Fon
       }
 
       const outlineBytes = await normalizeOutlineFontBytes(bytes).catch(() => undefined);
-      const font: VasaFont = {
+      const font: SkrivaFont = {
         id,
         family: descriptor.family,
         displayName: descriptor.displayName ?? descriptor.family,
@@ -213,7 +248,7 @@ export function createFontRegistry(options: CreateFontRegistryOptions = {}): Fon
 function fontFaceDataProps(
   bytes: Uint8Array | undefined,
   descriptor: Pick<FontDescriptor, "family" | "fallbackFamilies" | "metrics" | "weight">,
-): Pick<VasaFont, "data" | "outlineFont"> {
+): Pick<SkrivaFont, "data" | "outlineFont"> {
   if (bytes === undefined) {
     return {
       data: {
@@ -254,7 +289,7 @@ function fontVariationCoordinates(descriptor: Pick<FontDescriptor, "weight">) {
 
 export function createStandardFontMetrics(
   font: Pick<FontDescriptor, "family" | "fallbackFamilies">,
-): VasaFontMetrics {
+): SkrivaFontMetrics {
   const family = [font.family, ...(font.fallbackFamilies ?? [])].join(" ").toLowerCase();
   if (/(courier|mono|menlo|consolas|monaco)/.test(family)) {
     return { ...STANDARD_MONO_METRICS };
@@ -266,7 +301,7 @@ export function createStandardFontMetrics(
   return { ...STANDARD_SANS_METRICS };
 }
 
-function fontMetrics(font: TextOutlineFont): VasaFontMetrics {
+function fontMetrics(font: TextOutlineFont): SkrivaFontMetrics {
   const source = font.source as {
     descender?: number;
     tables?: {
@@ -315,33 +350,39 @@ function fontMetrics(font: TextOutlineFont): VasaFontMetrics {
 }
 
 export function createFontScriptStyle(
-  font: Pick<VasaFont, "data">,
+  font: Pick<SkrivaFont, "data">,
   options: { fontSize: number; kind: FontScriptKind; fallbackScale?: number },
 ): FontScriptStyle {
   const metrics = font.data.metrics;
-  const fallbackScale = options.fallbackScale ?? 0.5;
+  const fallbackScale = options.fallbackScale ?? DEFAULT_SCRIPT_SCALE;
   if (metrics === undefined) {
-    const fontSize = Math.max(1, options.fontSize * fallbackScale);
+    const fontSize = Math.max(MIN_FONT_SIZE, options.fontSize * fallbackScale);
     const baselineDelta =
-      options.kind === "super" ? -options.fontSize * 0.45 : options.fontSize * 0.2;
+      options.kind === "super"
+        ? -options.fontSize * SUPERSCRIPT_BASELINE_RATIO
+        : options.fontSize * SUBSCRIPT_BASELINE_RATIO;
 
     return {
       fontSize,
-      baselineShift: baselineDelta + options.fontSize * 0.9 - fontSize * 0.9,
+      baselineShift:
+        baselineDelta +
+        options.fontSize * SCRIPT_ASCENDER_ALIGNMENT_RATIO -
+        fontSize * SCRIPT_ASCENDER_ALIGNMENT_RATIO,
     };
   }
 
-  const unitsPerEm = positive(metrics.unitsPerEm) ?? 1;
+  const unitsPerEm = positive(metrics.unitsPerEm) ?? MIN_FONT_SIZE;
   const ySize = options.kind === "super" ? metrics.superscriptYSize : metrics.subscriptYSize;
   const yOffset = options.kind === "super" ? metrics.superscriptYOffset : metrics.subscriptYOffset;
   const scale = (positive(ySize) ?? unitsPerEm * fallbackScale) / unitsPerEm;
-  const fontSize = Math.max(1, options.fontSize * scale);
-  const metricShift = ((positive(yOffset) ?? unitsPerEm * 0.2) / unitsPerEm) * options.fontSize;
+  const fontSize = Math.max(MIN_FONT_SIZE, options.fontSize * scale);
+  const metricShift =
+    ((positive(yOffset) ?? unitsPerEm * SUBSCRIPT_BASELINE_RATIO) / unitsPerEm) * options.fontSize;
   const baselineDelta = options.kind === "super" ? -metricShift : metricShift;
   const ascenderRatio = clamp(
-    (positive(metrics.ascender) ?? unitsPerEm * 0.9) / unitsPerEm,
-    0.6,
-    1.1,
+    (positive(metrics.ascender) ?? unitsPerEm * SCRIPT_ASCENDER_ALIGNMENT_RATIO) / unitsPerEm,
+    SCRIPT_ASCENDER_MIN_RATIO,
+    SCRIPT_ASCENDER_MAX_RATIO,
   );
 
   return {
@@ -351,24 +392,26 @@ export function createFontScriptStyle(
 }
 
 export function createFontUnderlineStyle(
-  font: Pick<VasaFont, "data">,
+  font: Pick<SkrivaFont, "data">,
   options: { fontSize: number },
 ): FontTextDecorationStyle {
   const metrics = font.data.metrics;
   if (metrics === undefined) {
     return {
       offset: options.fontSize,
-      thickness: Math.max(1, Math.round(options.fontSize * 0.06)),
+      thickness: Math.max(MIN_FONT_SIZE, Math.round(options.fontSize * DECORATION_THICKNESS_RATIO)),
     };
   }
 
-  const unitsPerEm = positive(metrics.unitsPerEm) ?? 1;
+  const unitsPerEm = positive(metrics.unitsPerEm) ?? MIN_FONT_SIZE;
   const ascender = metrics.ascender / unitsPerEm;
-  const position = (metrics.underlinePosition ?? -unitsPerEm * 0.1) / unitsPerEm;
+  const position =
+    (metrics.underlinePosition ?? -unitsPerEm * UNDERLINE_POSITION_RATIO) / unitsPerEm;
   const thickness = Math.max(
-    1,
+    MIN_FONT_SIZE,
     Math.round(
-      ((positive(metrics.underlineThickness) ?? unitsPerEm * 0.05) / unitsPerEm) * options.fontSize,
+      ((positive(metrics.underlineThickness) ?? unitsPerEm * METRIC_THICKNESS_RATIO) / unitsPerEm) *
+        options.fontSize,
     ),
   );
 
@@ -379,28 +422,29 @@ export function createFontUnderlineStyle(
 }
 
 export function createFontStrikeoutStyle(
-  font: Pick<VasaFont, "data">,
+  font: Pick<SkrivaFont, "data">,
   options: { fontSize: number },
 ): FontTextDecorationStyle {
   const metrics = font.data.metrics;
   if (metrics === undefined) {
     return {
-      offset: options.fontSize * 0.6,
-      thickness: Math.max(1, Math.round(options.fontSize * 0.06)),
+      offset: options.fontSize * LINE_THROUGH_OFFSET_RATIO,
+      thickness: Math.max(MIN_FONT_SIZE, Math.round(options.fontSize * DECORATION_THICKNESS_RATIO)),
     };
   }
 
-  const unitsPerEm = positive(metrics.unitsPerEm) ?? 1;
+  const unitsPerEm = positive(metrics.unitsPerEm) ?? MIN_FONT_SIZE;
   const ascender = metrics.ascender / unitsPerEm;
   const visualHeight = positive(metrics.capHeight) ?? positive(metrics.xHeight);
   const position =
     visualHeight === undefined
-      ? (positive(metrics.strikeoutPosition) ?? unitsPerEm * 0.25) / unitsPerEm
+      ? (positive(metrics.strikeoutPosition) ?? unitsPerEm * STRIKEOUT_POSITION_RATIO) / unitsPerEm
       : visualHeight / unitsPerEm / 2;
   const thickness = Math.max(
-    1,
+    MIN_FONT_SIZE,
     Math.round(
-      ((positive(metrics.strikeoutSize) ?? unitsPerEm * 0.05) / unitsPerEm) * options.fontSize,
+      ((positive(metrics.strikeoutSize) ?? unitsPerEm * METRIC_THICKNESS_RATIO) / unitsPerEm) *
+        options.fontSize,
     ),
   );
 
@@ -410,10 +454,10 @@ export function createFontStrikeoutStyle(
   };
 }
 
-export function createFontItalicSkew(font: Pick<VasaFont, "data">): number | undefined {
+export function createFontItalicSkew(font: Pick<SkrivaFont, "data">): number | undefined {
   const angle = font.data.metrics?.italicAngle;
   if (angle === undefined || angle === 0) return undefined;
-  return Math.tan((-angle * Math.PI) / 180);
+  return Math.tan((-angle * Math.PI) / DEGREES_PER_HALF_TURN);
 }
 
 export function createCssFontFamily(family: string, fallbackFamilies: string[] = []) {
@@ -421,23 +465,23 @@ export function createCssFontFamily(family: string, fallbackFamilies: string[] =
 }
 
 export function createCanvasFontValue(
-  font: Pick<VasaFont, "cssFamily" | "style" | "weight">,
+  font: Pick<SkrivaFont, "cssFamily" | "style" | "weight">,
   options: { fontSize: number },
 ) {
   return `${font.style} ${font.weight} ${formatCssPixels(options.fontSize)} ${font.cssFamily}`;
 }
 
-export const googleFontAssetBasePath = "/__vasa-assets/fonts/google";
+export const googleFontAssetBasePath = "/__skriva-assets/fonts/google";
 
-export const arimoRegularFont: VasaFont = createNativeFont({
+export const arimoRegularFont: SkrivaFont = createNativeFont({
   id: "arimo-400",
   family: "Arimo",
   displayName: "Arimo",
   weight: "400",
-  fallbackFamilies: ["Arial", "sans-serif"],
+  fallbackFamilies: [...DEFAULT_FALLBACK_FAMILIES],
 });
 
-export const arimoFallbackFont: VasaFont = {
+export const arimoFallbackFont: SkrivaFont = {
   ...arimoRegularFont,
   id: "arimo",
 };
@@ -459,7 +503,7 @@ export function createGoogleFontDescriptor(
         : `${options.basePath}/${file}`,
     weight,
     style,
-    fallbackFamilies: ["Arial", "sans-serif"],
+    fallbackFamilies: [...DEFAULT_FALLBACK_FAMILIES],
   };
 }
 
@@ -481,104 +525,42 @@ export function createGoogleFontSource(
 }
 
 export function createGoogleFontDescriptors(options: GoogleFontDescriptorOptions = {}) {
-  return [
-    createGoogleFontDescriptor("Arimo", "arimo/Arimo-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Arimo", "arimo/Arimo-700.ttf", "700", options),
-    createGoogleFontDescriptor("Arimo", "arimo/Arimo-400-italic.ttf", "400", {
-      ...options,
-      style: "italic",
-    }),
-    createGoogleFontDescriptor("Arimo", "arimo/Arimo-700-italic.ttf", "700", {
-      ...options,
-      style: "italic",
-    }),
-    createGoogleFontDescriptor("Geist", "geist/Geist-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Geist", "geist/Geist-700.ttf", "700", options),
-    createGoogleFontDescriptor("Geist", "geist/Geist-400-italic.ttf", "400", {
-      ...options,
-      style: "italic",
-    }),
-    createGoogleFontDescriptor("Geist", "geist/Geist-700-italic.ttf", "700", {
-      ...options,
-      style: "italic",
-    }),
-    createGoogleFontDescriptor("Inter", "inter/Inter-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Inter", "inter/Inter-700.ttf", "700", options),
-    createGoogleFontDescriptor("Inter", "inter/Inter-400-italic.ttf", "400", {
-      ...options,
-      style: "italic",
-    }),
-    createGoogleFontDescriptor("Inter", "inter/Inter-700-italic.ttf", "700", {
-      ...options,
-      style: "italic",
-    }),
-    createGoogleFontDescriptor("Lora", "lora/Lora-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Lora", "lora/Lora-700.ttf", "700", options),
-    createGoogleFontDescriptor(
-      "Merriweather",
-      "merriweather/Merriweather-Regular.ttf",
-      "400",
-      options,
+  return googleFontManifest.flatMap((entry) =>
+    entry.faces.map((face) =>
+      createGoogleFontDescriptor(
+        entry.family,
+        googleFontFaceFilePath(entry.family, face.weight, face.style),
+        face.weight,
+        { ...options, style: face.style },
+      ),
     ),
-    createGoogleFontDescriptor("Merriweather", "merriweather/Merriweather-700.ttf", "700", options),
-    createGoogleFontDescriptor("Montserrat", "montserrat/Montserrat-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Montserrat", "montserrat/Montserrat-700.ttf", "700", options),
-    createGoogleFontDescriptor("Nunito", "nunito/Nunito-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Nunito", "nunito/Nunito-700.ttf", "700", options),
-    createGoogleFontDescriptor("Oswald", "oswald/Oswald-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Oswald", "oswald/Oswald-700.ttf", "700", options),
-    createGoogleFontDescriptor(
-      "Playfair Display",
-      "playfairdisplay/PlayfairDisplay-Regular.ttf",
-      "400",
-      options,
-    ),
-    createGoogleFontDescriptor(
-      "Playfair Display",
-      "playfairdisplay/PlayfairDisplay-700.ttf",
-      "700",
-      options,
-    ),
-    createGoogleFontDescriptor("Roboto", "roboto/Roboto-Regular.ttf", "400", options),
-    createGoogleFontDescriptor("Roboto", "roboto/Roboto-700.ttf", "700", options),
-    createGoogleFontDescriptor(
-      "Source Serif 4",
-      "sourceserif4/SourceSerif4-Regular.ttf",
-      "400",
-      options,
-    ),
-    createGoogleFontDescriptor(
-      "Source Serif 4",
-      "sourceserif4/SourceSerif4-700.ttf",
-      "700",
-      options,
-    ),
-    createGoogleFontDescriptor(
-      "Space Grotesk",
-      "spacegrotesk/SpaceGrotesk-Regular.ttf",
-      "400",
-      options,
-    ),
-    createGoogleFontDescriptor(
-      "Space Grotesk",
-      "spacegrotesk/SpaceGrotesk-700.ttf",
-      "700",
-      options,
-    ),
-  ] satisfies FontDescriptor[];
+  ) satisfies FontDescriptor[];
 }
 
-function createNativeFont(
+function googleFontFaceFilePath(family: string, weight: string, style: string) {
+  const slug = family.replace(/[^a-z0-9]/gi, "").toLowerCase();
+  return `${slug}/${googleFontFaceFileName(family, weight, style)}`;
+}
+
+function googleFontFaceFileName(family: string, weight: string, style: string) {
+  const compactFamily = family.replace(/\s+/g, "");
+  const suffix = style === "normal" ? "" : `-${style}`;
+  if (weight === DEFAULT_FONT_WEIGHT && style === DEFAULT_FONT_STYLE)
+    return `${compactFamily}-Regular.ttf`;
+  return `${compactFamily}-${weight}${suffix}.ttf`;
+}
+
+export function createNativeFont(
   descriptor: Required<Pick<FontDescriptor, "id" | "family" | "displayName" | "weight">> &
     Pick<FontDescriptor, "style" | "fallbackFamilies">,
-): VasaFont {
-  const fallbackFamilies = descriptor.fallbackFamilies ?? ["Arial", "sans-serif"];
+): SkrivaFont {
+  const fallbackFamilies = descriptor.fallbackFamilies ?? [...DEFAULT_FALLBACK_FAMILIES];
   return {
     id: descriptor.id,
     family: descriptor.family,
     displayName: descriptor.displayName,
     weight: String(descriptor.weight),
-    style: descriptor.style ?? "normal",
+    style: descriptor.style ?? DEFAULT_FONT_STYLE,
     fallbackFamilies,
     cssFamily: createCssFontFamily(descriptor.family, fallbackFamilies),
     data: {
@@ -721,7 +703,7 @@ export function googleFontUrlFromCss(css: string, subset = "latin") {
 }
 
 function isWoff2(bytes: Uint8Array) {
-  return bytes[0] === 0x77 && bytes[1] === 0x4f && bytes[2] === 0x46 && bytes[3] === 0x32;
+  return WOFF2_SIGNATURE.every((byte, index) => bytes[index] === byte);
 }
 
 function quoteFontFamily(family: string) {
@@ -730,7 +712,7 @@ function quoteFontFamily(family: string) {
 }
 
 function formatCssPixels(value: number) {
-  return `${Number.isInteger(value) ? value : Number(value.toFixed(4))}px`;
+  return `${Number.isInteger(value) ? value : Number(value.toFixed(CSS_PIXEL_PRECISION))}px`;
 }
 
 function positive(value: number | undefined) {

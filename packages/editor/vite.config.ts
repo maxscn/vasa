@@ -2,6 +2,21 @@ import { defineConfig } from "vite-plus";
 
 export default defineConfig({
   pack: {
+    entry: {
+      canvas: "canvas.ts",
+      enrichment: "enrichment.ts",
+      "enrichments/horizontal-rule": "enrichments/horizontal-rule.ts",
+      "enrichments/line-height": "enrichments/line-height.ts",
+      "enrichments/svg": "enrichments/svg.ts",
+      "enrichments/table": "enrichments/table.ts",
+      font: "font.ts",
+      headless: "headless.ts",
+      index: "src/index.ts",
+      layout: "layout.ts",
+      pdf: "pdf.ts",
+      react: "react.ts",
+      renderer: "renderer.ts",
+    },
     dts: {
       tsgo: true,
     },

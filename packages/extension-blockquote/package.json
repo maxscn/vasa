@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-blockquote",
+  "name": "@skriva/extension-blockquote",
   "version": "0.0.0",
-  "description": "Blockquote node extension for Vasa.",
+  "description": "Blockquote node extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,7 +22,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/core": "workspace:*"
+    "@skriva/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

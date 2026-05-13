@@ -1,5 +1,5 @@
 {
-  "name": "@vasa/pdf",
+  "name": "@skriva/pdf",
   "version": "0.0.0",
   "description": "A starter for creating a TypeScript package.",
   "homepage": "https://github.com/author/library#readme",
@@ -31,18 +31,18 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/layout": "workspace:*",
-    "@vasa/renderer": "workspace:*",
+    "@skriva/layout": "workspace:*",
+    "@skriva/renderer": "workspace:*",
     "react-reconciler": "catalog:"
   },
   "devDependencies": {
+    "@opeinspection/skriva": "workspace:*",
+    "@skriva/canvas": "workspace:*",
+    "@skriva/extension-svg": "workspace:*",
+    "@skriva/render-test": "workspace:*",
     "@types/node": "^25.5.0",
     "@types/react": "^19.0.8",
     "@typescript/native-preview": "7.0.0-dev.20260328.1",
-    "@vasa/canvas": "workspace:*",
-    "@vasa/editor": "workspace:*",
-    "@vasa/extension-svg": "workspace:*",
-    "@vasa/render-test": "workspace:*",
     "bumpp": "^11.0.1",
     "react": "^19.0.0",
     "typescript": "^6.0.2",

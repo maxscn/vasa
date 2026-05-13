@@ -1,5 +1,5 @@
-import type { CanvasNode, CanvasRendererExtension } from "@vasa/canvas";
-import type { RenderCustomNode, RenderNode } from "@vasa/renderer";
+import { PathNode, type CanvasNode, type CanvasRendererExtension } from "@skriva/canvas";
+import type { RenderCustomNode, RenderNode } from "@skriva/renderer";
 import {
   isTableCellNode,
   isTableRenderNode,
@@ -28,13 +28,13 @@ function renderCustomNodeToCanvasNodes(
   return [
     ...cellFillCanvasNode(node, yOffset),
     ...children,
-    {
+    PathNode({
       key: `${node.key}:border`,
       kind: "path",
       path: rectPath({ ...node.rect, y: node.rect.y + yOffset }),
       stroke: tableBorderColor(node),
       strokeWidth: tableBorderWidth(node),
-    },
+    }),
   ];
 }
 
@@ -42,11 +42,11 @@ function cellFillCanvasNode(node: RenderCustomNode, yOffset: number): CanvasNode
   const fill = tableCellBackground(node);
   if (fill === undefined) return [];
   return [
-    {
+    PathNode({
       key: `${node.key}:background`,
       kind: "path",
       path: rectPath({ ...node.rect, y: node.rect.y + yOffset }),
       fill,
-    },
+    }),
   ];
 }

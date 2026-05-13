@@ -3,14 +3,14 @@ import {
   layoutDocument,
   type BoxNode,
   type LayoutNode,
-} from "@vasa/layout";
-import { createRenderDocument, type TextOutlineFont } from "@vasa/renderer";
+} from "@skriva/layout";
+import { createRenderDocument, type TextOutlineFont } from "@skriva/renderer";
 import { expect, test } from "vite-plus/test";
 import {
   Box,
-  buildCanvasScene,
+  Scene,
   createCanvasCommands,
-  createCanvasRenderer,
+  Canvas,
   renderReactToLayoutTree,
   Text,
   reconcileCanvasScenes,
@@ -21,8 +21,21 @@ import { createElement } from "react";
 
 const measurer = createMonospaceTextMeasurer({ charWidth: 10 });
 
+type FillTextOperation = {
+  text: string;
+  x: number;
+  y: number;
+  font: string;
+  fill: string;
+};
+
+type FillRectOperation = {
+  rect: { x: number; y: number; width: number; height: number };
+  fill: string;
+};
+
 test("builds a scene from layout text lines and offsets paginated pages", () => {
-  const scene = buildCanvasScene(layoutDocument(document(), page()), { pageGap: 12 });
+  const scene = Scene(layoutDocument(document(), page()), { pageGap: 12 });
 
   expect(scene.pages).toHaveLength(2);
   expect(scene.pages[0].rect).toEqual({ x: 0, y: 0, width: 120, height: 40 });
@@ -62,7 +75,7 @@ test("builds a scene from layout text lines and offsets paginated pages", () => 
 
 test("builds the same scene from the shared render document contract", () => {
   const layout = layoutDocument(document(), page());
-  const scene = buildCanvasScene(createRenderDocument(layout), { pageGap: 12 });
+  const scene = Scene(createRenderDocument(layout), { pageGap: 12 });
 
   expect(scene.pages[0]?.children[0]).toMatchObject({
     key: "text:one:0",
@@ -81,7 +94,7 @@ test("builds the same scene from the shared render document contract", () => {
 });
 
 test("paints blockquote borders from shared render document boxes", () => {
-  const scene = buildCanvasScene({
+  const scene = Scene({
     pages: [
       {
         index: 0,
@@ -111,7 +124,7 @@ test("paints blockquote borders from shared render document boxes", () => {
 });
 
 test("creates ordered canvas commands with page clears before drawing", () => {
-  const scene = buildCanvasScene(layoutDocument(document(), page()), {
+  const scene = Scene(layoutDocument(document(), page()), {
     pageBackground: "#f8f8f8",
     pageGap: 12,
   });
@@ -173,16 +186,15 @@ test("paints different text runs with distinct font size and weight commands", (
       },
     ],
   };
-  const scene = buildCanvasScene(layoutDocument(richDocument, page()), {
+  const scene = Scene(layoutDocument(richDocument, page()), {
     pageGap: 12,
     text: (box) => ({
       font: box.id === "bold" ? "700 22px Roboto, sans-serif" : "400 14px Roboto, sans-serif",
     }),
   });
 
-  expect(createCanvasCommands(scene).filter((command) => command.type === "fillText")).toEqual([
+  expect(canvasOperations(createCanvasCommands(scene)).text).toEqual([
     {
-      type: "fillText",
       text: "Regular",
       x: 10,
       y: 4,
@@ -190,7 +202,6 @@ test("paints different text runs with distinct font size and weight commands", (
       fill: "#111111",
     },
     {
-      type: "fillText",
       text: "Bold",
       x: 80,
       y: 4,
@@ -217,10 +228,10 @@ test("applies italic skew to canvas outline text paths", () => {
       { page: { width: 80, height: 60, margin: 10 }, measurer },
     ),
   );
-  const regular = buildCanvasScene(renderDocument, {
+  const regular = Scene(renderDocument, {
     text: { outlineFont: outlineFont(), fontSize: 16 },
   }).pages[0]?.children[0];
-  const italic = buildCanvasScene(renderDocument, {
+  const italic = Scene(renderDocument, {
     text: { outlineFont: outlineFont(), fontSize: 16, skewX: 0.35 },
   }).pages[0]?.children[0];
 
@@ -242,7 +253,7 @@ test("keeps shared render document text commands aligned with canvas text comman
       measurer,
     }),
   );
-  const scene = buildCanvasScene(renderDocument, { pageGap: 12 });
+  const scene = Scene(renderDocument, { pageGap: 12 });
 
   expect(textCommandSummary(createCanvasCommands(scene))).toEqual([
     ["Small", 10, 4],
@@ -259,7 +270,7 @@ test("preserves render document line fonts when native canvas text is used", () 
         runs: [
           {
             id: "regular",
-            text: "Vasa editor ",
+            text: "Skriva editor ",
             style: { font: "normal 400 16px Liberation Sans", lineHeight: 35 },
           },
           {
@@ -291,24 +302,24 @@ test("preserves render document line fonts when native canvas text is used", () 
   );
 
   expect(
-    createCanvasCommands(
-      buildCanvasScene(renderDocument, {
-        text: () => ({ fill: "#1f2937" }),
-      }),
-    ).filter((command) => command.type === "fillText"),
+    canvasOperations(
+      createCanvasCommands(
+        Scene(renderDocument, {
+          text: () => ({ fill: "#1f2937" }),
+        }),
+      ),
+    ).text,
   ).toEqual([
     {
-      type: "fillText",
-      text: "Vasa editor ",
+      text: "Skriva editor ",
       x: 10,
       y: 10,
       font: "normal 400 16px Liberation Sans",
       fill: "#1f2937",
     },
     {
-      type: "fillText",
       text: "demo",
-      x: 106,
+      x: 122,
       y: 10,
       font: "normal 700 28px Liberation Sans",
       fill: "#1f2937",
@@ -357,15 +368,16 @@ test("applies paint font size when native canvas text has no CSS font", () => {
   );
 
   const commands = createCanvasCommands(
-    buildCanvasScene(renderDocument, {
+    Scene(renderDocument, {
       text: (box, lineIndex) => ({
         fill: "#111111",
         fontSize: box.lines?.[lineIndex]?.verticalAlign === "sub" ? 10 : 16,
       }),
     }),
-  ).filter((command) => command.type === "fillText");
+  );
+  const text = canvasOperations(commands).text;
 
-  expect(commands.map((command) => [command.text, command.font])).toEqual([
+  expect(text.map((command) => [command.text, command.font])).toEqual([
     ["H", "16px sans-serif"],
     ["2", "10px sans-serif"],
   ]);
@@ -399,18 +411,13 @@ test("applies paint font size to underline and strike decoration offsets", () =>
   );
 
   const commands = createCanvasCommands(
-    buildCanvasScene(renderDocument, {
+    Scene(renderDocument, {
       text: () => ({ fill: "#111111", fontSize: 10 }),
     }),
   );
-  const text = commands.filter(
-    (command): command is Extract<CanvasCommand, { type: "fillText" }> =>
-      command.type === "fillText",
-  );
-  const decorations = commands.filter(
-    (command): command is Extract<CanvasCommand, { type: "fillRect" }> =>
-      command.type === "fillRect" && command.fill === "#111111",
-  );
+  const operations = canvasOperations(commands);
+  const text = operations.text;
+  const decorations = operations.rects.filter((command) => command.fill === "#111111");
 
   expect(decorations.map((command, index) => command.rect.y - (text[index]?.y ?? 0))).toEqual([
     10, 6,
@@ -442,18 +449,13 @@ test("keeps strikethrough at its font metric offset with outlined text", () => {
     { page: { width: 120, height: 60, margin: 10 }, measurer },
   );
   const commands = createCanvasCommands(
-    buildCanvasScene(createRenderDocument(layout), {
+    Scene(createRenderDocument(layout), {
       text: () => ({ fill: "#111111", fontSize: 10, outlineFont: outlineFont() }),
     }),
   );
-  const text = commands.find(
-    (command): command is Extract<CanvasCommand, { type: "fillText" }> =>
-      command.type === "fillText",
-  );
-  const decoration = commands.find(
-    (command): command is Extract<CanvasCommand, { type: "fillRect" }> =>
-      command.type === "fillRect" && command.fill === "#111111",
-  );
+  const operations = canvasOperations(commands);
+  const text = operations.text.at(0);
+  const decoration = operations.rects.find((command) => command.fill === "#111111");
   const line = layout.pages[0]?.boxes[0]?.lines?.[0];
 
   expect(text).toBeUndefined();
@@ -486,18 +488,13 @@ test("uses layout bounds for outlined text backgrounds and decorations", () => {
   );
   const line = layout.pages[0]?.boxes[0]?.lines?.[0];
   const commands = createCanvasCommands(
-    buildCanvasScene(createRenderDocument(layout), {
+    Scene(createRenderDocument(layout), {
       text: () => ({ fill: "#111111", fontSize: 10, outlineFont: outlineFont() }),
     }),
   );
-  const background = commands.find(
-    (command): command is Extract<CanvasCommand, { type: "fillRect" }> =>
-      command.type === "fillRect" && command.fill === "#fef08a",
-  );
-  const decoration = commands.find(
-    (command): command is Extract<CanvasCommand, { type: "fillRect" }> =>
-      command.type === "fillRect" && command.fill === "#111111",
-  );
+  const operations = canvasOperations(commands);
+  const background = operations.rects.find((command) => command.fill === "#fef08a");
+  const decoration = operations.rects.find((command) => command.fill === "#111111");
 
   expect(line).toBeDefined();
   expect(background?.rect.x).toBe(Math.round(line!.x));
@@ -507,12 +504,12 @@ test("uses layout bounds for outlined text backgrounds and decorations", () => {
 });
 
 test("reconciles retained, updated, mounted, and unmounted scene nodes", () => {
-  const previous = buildCanvasScene(layoutDocument(document(), page()), { pageGap: 12 });
+  const previous = Scene(layoutDocument(document(), page()), { pageGap: 12 });
   const nextDocument: BoxNode = {
     type: "box",
     children: [textBlock("one", "alpha beta changed"), textBlock("three", "epsilon", 20)],
   };
-  const next = buildCanvasScene(layoutDocument(nextDocument, page()), { pageGap: 12 });
+  const next = Scene(layoutDocument(nextDocument, page()), { pageGap: 12 });
 
   expect(
     reconcileCanvasScenes(previous, next).map((operation) => [operation.type, operation.key]),
@@ -528,7 +525,7 @@ test("reconciles retained, updated, mounted, and unmounted scene nodes", () => {
 
 test("renderer skips repainting when reconciliation only retains nodes", () => {
   const surface = recordingSurface();
-  const renderer = createCanvasRenderer(surface, { pageGap: 12 });
+  const renderer = Canvas(surface, { pageGap: 12 });
   const layout = layoutDocument(document(), page());
 
   const first = renderer.render(layout);
@@ -566,14 +563,14 @@ test("exports React primitives through the canvas reconciler", () => {
 test("preserves custom canvas primitives for renderer extensions", () => {
   const Badge = createElement("badge", {
     id: "brand",
-    label: "Vasa",
+    label: "Skriva",
     style: { width: 32, height: 12 },
   });
 
   expect(renderReactToLayoutTree(Badge).children?.[0]).toEqual({
     type: "badge",
     id: "brand",
-    label: "Vasa",
+    label: "Skriva",
     style: { width: 32, height: 12 },
     children: [],
   });
@@ -611,13 +608,55 @@ function recordingSurface(): CanvasSurface & { calls: Array<[string, ...unknown[
     fillRect: (...args) => calls.push(["fillRect", ...args]),
     strokeRect: (...args) => calls.push(["strokeRect", ...args]),
     fillText: (...args) => calls.push(["fillText", ...args]),
+    beginPath: () => calls.push(["beginPath"]),
+    moveTo: (...args) => calls.push(["moveTo", ...args]),
+    lineTo: (...args) => calls.push(["lineTo", ...args]),
+    bezierCurveTo: (...args) => calls.push(["bezierCurveTo", ...args]),
+    closePath: () => calls.push(["closePath"]),
+    fill: () => calls.push(["fill"]),
+    stroke: () => calls.push(["stroke"]),
   };
 }
 
 function textCommandSummary(commands: ReturnType<typeof createCanvasCommands>) {
-  return commands
-    .filter((command) => command.type === "fillText")
-    .map((command) => [command.text, command.x, command.y]);
+  return canvasOperations(commands).text.map((command) => [command.text, command.x, command.y]);
+}
+
+function canvasOperations(commands: CanvasCommand[]): {
+  rects: FillRectOperation[];
+  text: FillTextOperation[];
+} {
+  const rects: FillRectOperation[] = [];
+  const text: FillTextOperation[] = [];
+  const surface: CanvasSurface = {
+    clearRect() {},
+    fillRect(x, y, width, height) {
+      rects.push({
+        rect: { x, y, width, height },
+        fill: surface.fillStyle ?? "",
+      });
+    },
+    strokeRect() {},
+    fillText(value, x, y) {
+      text.push({
+        text: value,
+        x,
+        y,
+        font: surface.font ?? "",
+        fill: surface.fillStyle ?? "",
+      });
+    },
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    bezierCurveTo() {},
+    closePath() {},
+    fill() {},
+    stroke() {},
+  };
+
+  for (const command of commands) command.apply(surface);
+  return { rects, text };
 }
 
 function outlineFont(): TextOutlineFont {

@@ -1,4 +1,4 @@
-import type { Rect } from "@vasa/layout";
+import type { Rect } from "@skriva/layout";
 
 export type SvgPathCommand =
   | { type: "moveTo"; x: number; y: number }

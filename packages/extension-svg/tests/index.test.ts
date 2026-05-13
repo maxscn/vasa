@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { collectExtensionRenderers, collectRendererExtensions } from "@vasa/core";
+import { collectExtensionRenderers, collectRendererExtensions } from "@skriva/core";
 import { expect, test } from "vite-plus/test";
 import { createSvgExtension, createSvgNodeFromSource, readSvgFileAsNode } from "../src/index.ts";
 

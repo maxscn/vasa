@@ -1,10 +1,15 @@
-import { HorizontalRule } from "@vasa/extension-horizontal-rule";
-import { LineHeight } from "@vasa/extension-line-height";
-import { SvgExtension } from "@vasa/extension-svg";
-import { TableExtension } from "@vasa/extension-table";
-import type { EditorConfig } from "@vasa/editor";
-import { arimoFallbackFont, arimoRegularFont, type FontDescriptor } from "@vasa/font";
+import { HorizontalRule } from "@opeinspection/skriva/enrichments/horizontal-rule";
+import { LineHeight } from "@opeinspection/skriva/enrichments/line-height";
+import { SvgExtension } from "@opeinspection/skriva/enrichments/svg";
+import { TableExtension } from "@opeinspection/skriva/enrichments/table";
+import type { SkrivaEditorConfig } from "@opeinspection/skriva";
 import {
+  arimoFallbackFont,
+  arimoRegularFont,
+  type FontDescriptor,
+} from "@opeinspection/skriva/font";
+import {
+  localControlledGoogleFontFamilies,
   localArimoRegularFontSource,
   localGoogleFontDescriptors,
 } from "../../editor/src/editor-font-assets";
@@ -16,6 +21,13 @@ const defaultFontFamilies = [
   systemFont("Verdana", ["Geneva", "sans-serif"]),
   ...localGoogleFontDescriptors,
 ] satisfies FontDescriptor[];
+
+const webEditorExtensions: NonNullable<SkrivaEditorConfig["extensions"]> = [
+  HorizontalRule,
+  LineHeight,
+  SvgExtension,
+  TableExtension,
+];
 
 export const webEditorConfig = {
   bundledFont: arimoRegularFont,
@@ -32,16 +44,17 @@ export const webEditorConfig = {
   textFontSize: 16,
   textLineHeight: 16,
   lineHeightOptions: [1, 1.15, 1.5, 2],
-  extensions: [HorizontalRule, LineHeight, SvgExtension, TableExtension],
+  extensions: webEditorExtensions,
   extraChildren: [],
   fontFamilies: defaultFontFamilies,
+  controlledFontFamilies: localControlledGoogleFontFamilies,
   fontSizeOptions: [12, 14, 16, 18, 22, 28, 36],
   initialColor: "#2563eb",
   canvasTextMode: "outline",
   canvasBitmapScale: 1.5,
   pageBackground: "#fffdfa",
   textColor: "#1f2937",
-} satisfies EditorConfig;
+} satisfies SkrivaEditorConfig;
 
 function systemFont(family: string, fallbackFamilies: string[]): FontDescriptor {
   return {

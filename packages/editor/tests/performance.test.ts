@@ -1,6 +1,7 @@
-import { buildCanvasScene } from "@vasa/canvas";
-import type { VasaFont } from "@vasa/font";
-import { createRenderDocument } from "@vasa/renderer";
+import { Scene } from "@skriva/canvas";
+import { Editor } from "@skriva/core";
+import type { SkrivaFont } from "@skriva/font";
+import { createRenderDocument } from "@skriva/renderer";
 import { expect, test } from "vite-plus/test";
 import { layoutDocument, type TextMeasurer } from "../../layout/src/index.ts";
 import { renderDocumentToPdf } from "../../pdf/src/index.ts";
@@ -10,13 +11,16 @@ import {
   createEditorRenderResolveTextStyle,
   createEditorRenderTextStyle,
   createEditorRenderTextMeasurer,
-  createEditorSession,
+  createPlainTextClipboardAdapter,
+  createProjectSurfaceSelection,
+  createSkrivaSurfaceAdapter,
   currentTextBlockType,
-  insertTextInEditorSession,
+  defaultEditorExtensions,
+  insertText,
   isToolbarMarkActive,
-  type EditorJson,
+  type JSONContent,
   type EditorRenderProfileOptions,
-  type EditorSession,
+  type EditorSelection,
 } from "../src/index.ts";
 
 const paragraphCount = 12;
@@ -29,10 +33,11 @@ const renderDocumentIterations = 200;
 const canvasIterations = 80;
 const pdfIterations = 12;
 const toolbarIterations = 400;
+const surfaceTypingIterations = 120;
 const benchmarkSamples = 8;
 
 const page = { width: 612, height: 792, margin: 48 };
-const fallbackFont: VasaFont = {
+const fallbackFont: SkrivaFont = {
   id: "fallback",
   family: "Bench Sans",
   displayName: "Bench Sans",
@@ -71,7 +76,11 @@ type BenchResult = {
 
 test("editor typing hot path stays inside interaction budgets", () => {
   const baseDoc = createBenchmarkDocument();
-  const editedDoc = insertTextInEditorSession(baseSessionFromDoc(baseDoc), "x").doc;
+  const baseSelection: EditorSelection = {
+    path: [paragraphCount - 1, 0],
+    offset: paragraphText().length,
+  };
+  const editedDoc = insertText(baseDoc, baseSelection, "x").doc;
   const textStyle = createEditorRenderTextStyle(renderProfile);
   const resolveTextStyle = createEditorRenderResolveTextStyle(renderProfile);
   const layoutTree = createEditorLayoutTree(editedDoc, {
@@ -81,22 +90,21 @@ test("editor typing hot path stays inside interaction budgets", () => {
     resolveTextStyle,
   });
   const layout = layoutDocumentWithoutTextGrid(layoutTree);
-  const baseSession = createEditorSession({
-    doc: baseDoc,
-    selection: { path: [paragraphCount - 1, 0], offset: paragraphText().length },
-  });
   const baseContract = createBenchmarkRenderContract(baseDoc);
   const results: BenchResult[] = [];
 
   results.push(
     benchmark(
-      "session insert with undo history",
+      "text insert transform",
       insertIterations,
       0.15,
       () => {
-        let session: EditorSession = baseSession;
+        let doc = baseDoc;
+        let selection = baseSelection;
         for (const char of typingText(insertIterations)) {
-          session = insertTextInEditorSession(session, char);
+          const inserted = insertText(doc, selection, char);
+          doc = inserted.doc;
+          selection = inserted.selection;
         }
       },
       1,
@@ -104,8 +112,8 @@ test("editor typing hot path stays inside interaction budgets", () => {
   );
 
   results.push(
-    benchmark("render contract after edit", renderIterations, 8, () => {
-      createBenchmarkRenderContract(insertTextInEditorSession(baseSession, "x").doc);
+    benchmark("render contract after edit", renderIterations, 10, () => {
+      createBenchmarkRenderContract(insertText(baseDoc, baseSelection, "x").doc);
     }),
   );
 
@@ -121,7 +129,7 @@ test("editor typing hot path stays inside interaction budgets", () => {
   );
 
   results.push(
-    benchmark("layout document measurement", layoutDocumentIterations, 6, () => {
+    benchmark("layout document measurement", layoutDocumentIterations, 9, () => {
       layoutDocumentWithoutTextGrid(layoutTree);
     }),
   );
@@ -134,7 +142,7 @@ test("editor typing hot path stays inside interaction budgets", () => {
 
   results.push(
     benchmark("canvas scene build", canvasIterations, 0.5, () => {
-      buildCanvasScene(baseContract.renderDocument, { pageGap: 18 });
+      Scene(baseContract.renderDocument, { pageGap: 18 });
     }),
   );
 
@@ -154,21 +162,43 @@ test("editor typing hot path stays inside interaction budgets", () => {
 
   results.push(
     benchmark("toolbar selection state", toolbarIterations, 0.1, () => {
-      currentTextBlockType(baseDoc, baseSession.selection);
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "bold");
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "italic");
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "underline");
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "strike");
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "code");
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "highlight");
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "superscript");
-      isToolbarMarkActive(baseDoc, baseSession.selection, [], "subscript");
+      currentTextBlockType(baseDoc, baseSelection);
+      isToolbarMarkActive(baseDoc, baseSelection, [], "bold");
+      isToolbarMarkActive(baseDoc, baseSelection, [], "italic");
+      isToolbarMarkActive(baseDoc, baseSelection, [], "underline");
+      isToolbarMarkActive(baseDoc, baseSelection, [], "strike");
+      isToolbarMarkActive(baseDoc, baseSelection, [], "code");
+      isToolbarMarkActive(baseDoc, baseSelection, [], "highlight");
+      isToolbarMarkActive(baseDoc, baseSelection, [], "superscript");
+      isToolbarMarkActive(baseDoc, baseSelection, [], "subscript");
     }),
+  );
+
+  results.push(
+    benchmark(
+      "tiptap surface text insertion",
+      surfaceTypingIterations,
+      0.35,
+      () => {
+        const editor = createBenchmarkTiptapEditor(baseDoc);
+        const surface = createSkrivaSurfaceAdapter({
+          editor,
+          clipboard: createPlainTextClipboardAdapter(),
+          projectSelection: createProjectSurfaceSelection(editor),
+        });
+        surface.placeSelectionAt(baseSelection);
+        for (const char of typingText(surfaceTypingIterations)) {
+          surface.insertText(char);
+        }
+        editor.destroy();
+      },
+      1,
+    ),
   );
 
   const failures = results.filter((result) => result.perRunMs > result.perRunBudgetMs);
   expect(formatBenchResults(results, failures)).toBe("all benchmarks within budget");
-});
+}, 20_000);
 
 function benchmark(
   name: string,
@@ -190,13 +220,6 @@ function benchmark(
   return { name, totalMs, perRunMs: totalMs / iterations, perRunBudgetMs };
 }
 
-function baseSessionFromDoc(doc: EditorJson) {
-  return createEditorSession({
-    doc,
-    selection: { path: [paragraphCount - 1, 0], offset: paragraphText().length },
-  });
-}
-
 function layoutDocumentWithoutTextGrid(layoutTree: ReturnType<typeof createEditorLayoutTree>) {
   return layoutDocument(layoutTree as Parameters<typeof layoutDocument>[0], {
     page,
@@ -205,7 +228,7 @@ function layoutDocumentWithoutTextGrid(layoutTree: ReturnType<typeof createEdito
   });
 }
 
-function createBenchmarkRenderContract(doc: EditorJson) {
+function createBenchmarkRenderContract(doc: JSONContent) {
   return createEditorRenderDocument({
     doc,
     page,
@@ -217,7 +240,7 @@ function createBenchmarkRenderContract(doc: EditorJson) {
   });
 }
 
-function createBenchmarkDocument(): EditorJson {
+function createBenchmarkDocument(): JSONContent {
   return {
     type: "doc",
     content: Array.from({ length: paragraphCount }, () => ({
@@ -230,6 +253,13 @@ function createBenchmarkDocument(): EditorJson {
       ],
     })),
   };
+}
+
+function createBenchmarkTiptapEditor(doc: JSONContent) {
+  return new Editor({
+    content: doc,
+    extensions: defaultEditorExtensions.flatMap((extension) => extension.tiptap ?? []),
+  });
 }
 
 function paragraphText() {

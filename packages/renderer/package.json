@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/renderer",
+  "name": "@skriva/renderer",
   "version": "0.0.0",
-  "description": "Shared renderer contracts and display document utilities for Vasa.",
+  "description": "Shared renderer contracts and display document utilities for Skriva.",
   "homepage": "https://github.com/author/library#readme",
   "bugs": {
     "url": "https://github.com/author/library/issues"
@@ -31,7 +31,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/layout": "workspace:*",
+    "@skriva/layout": "workspace:*",
     "opentype.js": "catalog:"
   },
   "devDependencies": {

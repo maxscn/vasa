@@ -4,6 +4,7 @@ export default defineConfig({
   pack: {
     entry: {
       box: "src/box.ts",
+      commands: "src/commands/index.ts",
       document: "src/document.ts",
       index: "src/index.ts",
       primitives: "src/primitives.ts",

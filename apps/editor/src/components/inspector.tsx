@@ -1,5 +1,5 @@
 import { Columns3, Download, Rows3, Table2 } from "lucide-react";
-import { isSelectionInsideEditorNodeType } from "@vasa/editor";
+import { isSelectionInsideEditorNodeType } from "@opeinspection/skriva";
 import { useEditorShell } from "./editor-shell-context";
 import { InspectorSelect } from "./inspector-select";
 import { marginPresets, pagePresets, type MarginPresetId, type PagePresetId } from "./presets";

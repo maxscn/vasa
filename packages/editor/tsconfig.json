@@ -17,12 +17,12 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "@vasa/extension-line-height": ["../extension-line-height/src/index.ts"],
-      "@vasa/extension-table": ["../extension-table/src/index.ts"],
-      "@vasa/layout": ["../layout/src/index.ts"],
-      "@vasa/pdf": ["../pdf/src/index.ts"]
+      "@skriva/extension-line-height": ["../extension-line-height/src/index.ts"],
+      "@skriva/extension-table": ["../extension-table/src/index.ts"],
+      "@skriva/layout": ["../layout/src/index.ts"],
+      "@skriva/pdf": ["../pdf/src/index.ts"]
     },
     "skipLibCheck": true
   },
-  "include": ["src", "react"]
+  "include": ["src", "react", "headless.ts", "react.ts"]
 }

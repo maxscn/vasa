@@ -1,0 +1,11 @@
+export const CANVAS_ORIGIN = 0;
+export const DEFAULT_CANVAS_PAGE_GAP = 24;
+export const DEFAULT_CANVAS_TEXT_FILL = "#111111";
+export const DEFAULT_STROKE_WIDTH = 1;
+export const DEFAULT_BLOCKQUOTE_BORDER_WIDTH = 3;
+export const CSS_NUMBER_PRECISION = 3;
+export const CSS_FONT_SIZE_CAPTURE_INDEX = 1;
+export const MIN_PIXEL_SNAP = 0;
+export const MIN_TEXT_DECORATION_THICKNESS = 1;
+export const TEXT_DECORATION_THICKNESS_RATIO = 0.06;
+export const LINE_THROUGH_OFFSET_RATIO = 0.6;

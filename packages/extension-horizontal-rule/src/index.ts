@@ -1,7 +1,7 @@
-import type { CanvasRendererExtension } from "@vasa/canvas";
-import { Node, type VasaExtension } from "@vasa/core";
-import type { LayoutExtension, LayoutNodeBase } from "@vasa/layout";
-import type { PdfRendererExtension } from "@vasa/pdf";
+import type { CanvasRendererExtension } from "@skriva/canvas";
+import { Node, type SkrivaExtension } from "@skriva/core";
+import type { LayoutExtension, LayoutNodeBase } from "@skriva/layout";
+import type { PdfRendererExtension } from "@skriva/pdf";
 import { horizontalRuleCanvasRenderer } from "./renderers/canvas.js";
 import { horizontalRulePdfRenderer } from "./renderers/pdf.js";
 
@@ -16,11 +16,10 @@ export type HorizontalRuleNode = LayoutNodeBase<"horizontalRule"> & {
 
 export type HorizontalRuleRenderers = {
   canvas: CanvasRendererExtension;
-  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 
-declare module "@vasa/layout" {
+declare module "@skriva/layout" {
   interface LayoutNodeByType {
     horizontalRule: HorizontalRuleNode;
   }
@@ -32,7 +31,7 @@ export function createHorizontalRuleNode(
   return { type: "horizontalRule", ...node };
 }
 
-export const HorizontalRule: VasaExtension<HorizontalRuleRenderers> = {
+export const HorizontalRule: SkrivaExtension<HorizontalRuleRenderers> = {
   name: "horizontalRule",
   tiptap: Node.create({
     name: "horizontalRule",
@@ -65,7 +64,6 @@ export const HorizontalRule: VasaExtension<HorizontalRuleRenderers> = {
   } satisfies LayoutExtension<HorizontalRuleNode>,
   renderers: {
     canvas: horizontalRuleCanvasRenderer,
-    webgl: horizontalRuleCanvasRenderer,
     pdf: horizontalRulePdfRenderer,
   },
 };

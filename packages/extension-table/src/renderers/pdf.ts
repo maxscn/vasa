@@ -1,5 +1,5 @@
-import type { PdfCommand, PdfRendererExtension } from "@vasa/pdf";
-import type { RenderCustomNode, RenderNode } from "@vasa/renderer";
+import type { PdfCommand, PdfRendererExtension } from "@skriva/pdf";
+import type { RenderCustomNode, RenderNode } from "@skriva/renderer";
 import {
   isTableCellNode,
   isTableRenderNode,

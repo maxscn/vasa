@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from "react";
-import type { VasaExtension } from "@vasa/core";
+import type { SkrivaExtension } from "@skriva/core";
 import { extendSelection, selectAllDocument } from "../src/actions.ts";
 import {
   defaultEditorExtensions,
@@ -11,38 +11,21 @@ import {
   toggleSuperscript,
   toggleUnderline,
 } from "../src/font-attributes.ts";
+import { isPrintableTextKey, moveSelectionHorizontallyByKeyboard } from "../src/keyboard.ts";
 import {
-  deleteGranularity,
-  isPrintableTextKey,
-  moveSelectionHorizontallyByKeyboard,
-} from "../src/keyboard.ts";
-import {
-  editorTextLineAtSelection,
   moveSelectionVertically,
   type EditorRenderLineDocument,
   type EditorRenderLineOptions,
 } from "../src/interaction.ts";
-import {
-  insertTextInEditorSession,
-  runEditorSessionAction,
-  updateEditorSessionSelection,
-  type EditorSession,
-} from "../src/session.ts";
-import {
-  ensureParagraphAfterCurrentTable,
-  isSelectionPointAtCurrentTableEnd,
-  type EditorJson,
-  type EditorSelection,
-} from "../src/index.ts";
+import { type JSONContent, type EditorSelection } from "../src/index.ts";
 
 type EditorKeymapEvent = KeyboardEvent<HTMLTextAreaElement>;
 
 export type EditorKeymapOptions = {
-  editorDocument: EditorJson;
+  editorDocument: JSONContent;
   renderDocument: EditorRenderLineDocument;
   renderLineOptions: EditorRenderLineOptions;
   measureText: (text: string, font?: string) => number;
-  updateEditor: (update: (session: EditorSession) => EditorSession) => void;
   updateSelection: (
     nextSelection: EditorSelection | ((currentSelection: EditorSelection) => EditorSelection),
   ) => void;
@@ -53,10 +36,10 @@ export type EditorKeymapOptions = {
   toggleMark: (
     type: string,
     mutate: (
-      doc: EditorJson,
+      doc: JSONContent,
       currentSelection: EditorSelection,
     ) => {
-      doc: EditorJson;
+      doc: JSONContent;
       selection: EditorSelection;
     },
     attrs?: Record<string, unknown>,
@@ -108,36 +91,14 @@ export const editorTextKeymap: EditorKeymap = {
   backspace: (event, options) => {
     event.preventDefault();
     options.suppressBeforeInput("deleteContentBackward");
-    options.updateEditor(
-      (session) =>
-        runEditorSessionAction(session, {
-          type: "backspace",
-          granularity: deleteGranularity(event),
-          line: editorTextLineAtSelection(
-            options.renderDocument,
-            session.selection,
-            options.renderLineOptions,
-          ),
-        }).session,
-    );
-    return true;
+    void options;
+    return false;
   },
   delete: (event, options) => {
     event.preventDefault();
     options.suppressBeforeInput("deleteContentForward");
-    options.updateEditor(
-      (session) =>
-        runEditorSessionAction(session, {
-          type: "delete",
-          granularity: deleteGranularity(event),
-          line: editorTextLineAtSelection(
-            options.renderDocument,
-            session.selection,
-            options.renderLineOptions,
-          ),
-        }).session,
-    );
-    return true;
+    void options;
+    return false;
   },
   "shift+enter": (event, options) => {
     event.preventDefault();
@@ -160,14 +121,14 @@ export const editorNativeKeymap: EditorKeymap = {
 
 export const defaultEditorKeymap: EditorKeymap = createDefaultEditorKeymap();
 
-export function createDefaultEditorKeymap(extensions: VasaExtension[] = defaultEditorExtensions) {
+export function createDefaultEditorKeymap(extensions: SkrivaExtension[] = defaultEditorExtensions) {
   return {
     ...editorNativeKeymap,
     ...createEditorExtensionKeymap(extensions),
   };
 }
 
-export function createEditorExtensionKeymap(extensions: VasaExtension[]) {
+export function createEditorExtensionKeymap(extensions: SkrivaExtension[]) {
   const keymap: EditorKeymap = {};
 
   for (const extension of extensions) {
@@ -210,10 +171,8 @@ export function applyEditorKeymap(
   if (shortcut?.(event, options)) return true;
 
   if (isPrintableTextKey(event)) {
-    event.preventDefault();
     options.suppressBeforeInput("insertText");
-    options.updateEditor((session) => insertTextInEditorSession(session, event.key));
-    return true;
+    return false;
   }
 
   return false;
@@ -314,10 +273,10 @@ function toggleShortcutMark(
   options: EditorKeymapOptions,
   type: string,
   mutate: (
-    doc: EditorJson,
+    doc: JSONContent,
     currentSelection: EditorSelection,
   ) => {
-    doc: EditorJson;
+    doc: JSONContent;
     selection: EditorSelection;
   },
   attrs: Record<string, unknown> = {},
@@ -377,24 +336,16 @@ function moveVertically(
   direction: "up" | "down",
 ) {
   event.preventDefault();
-  options.updateEditor((session) => {
+  options.updateSelection((selection) => {
     const nextPoint = moveSelectionVertically(
       options.renderDocument,
-      session.selection,
+      selection,
       direction,
       options.measureText,
       options.renderLineOptions,
+      options.editorDocument,
     );
-    const tableExit =
-      direction === "down" &&
-      isSelectionPointAtCurrentTableEnd(session.doc, session.selection, nextPoint)
-        ? ensureParagraphAfterCurrentTable(session.doc, session.selection)
-        : undefined;
-
-    return updateEditorSessionSelection(
-      tableExit === undefined ? session : { ...session, doc: tableExit.doc },
-      extendSelection(session.selection, tableExit?.selection ?? nextPoint, event.shiftKey),
-    );
+    return extendSelection(selection, nextPoint, event.shiftKey);
   });
   return true;
 }

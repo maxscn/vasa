@@ -1,15 +1,15 @@
-import type { CanvasRendererExtension } from "@vasa/canvas";
+import type { CanvasRendererExtension } from "@skriva/canvas";
 import {
   mergeExtensionRenderers,
   type ExtensionRendererPlacement,
   type MaybeArray,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
-import type { LayoutExtension, LayoutNodeBase } from "@vasa/layout";
-import type { PdfRendererExtension } from "@vasa/pdf";
-import type { RendererExtension } from "@vasa/renderer";
-import { createElement, type ReactElement, type ReactNode } from "react";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
+import type { LayoutExtension, LayoutNodeBase } from "@skriva/layout";
+import type { PdfRendererExtension } from "@skriva/pdf";
+import type { RendererExtension } from "@skriva/renderer";
+import { createElement, type DragEvent, type ReactElement, type ReactNode } from "react";
 import { svgCanvasRenderer } from "./renderers/canvas.js";
 import { svgPdfRenderer } from "./renderers/pdf.js";
 import type { SvgPathSpec } from "./renderers/shared.js";
@@ -26,7 +26,6 @@ export type SvgNode = LayoutNodeBase<"svg"> & {
 
 export type SvgExtensionRenderers = {
   canvas: CanvasRendererExtension;
-  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 
@@ -36,7 +35,7 @@ export type SvgProps = Omit<SvgNode, "type"> & {
 
 export type SvgExtensionOptions = {
   renderer?: MaybeArray<RendererExtension>;
-  renderers?: VasaExtensionRenderers<SvgExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<SvgExtensionRenderers>;
   rendererPlacement?: ExtensionRendererPlacement;
 };
 
@@ -46,7 +45,19 @@ export type SvgImportOptions = {
   marginTop?: number;
 };
 
-declare module "@vasa/layout" {
+export type SvgDropHandlerOptions = {
+  addNodes: (nodes: SvgNode[]) => void;
+};
+
+export type SvgSurfaceDropHandler = {
+  canDrop: (event: DragEvent<HTMLElement>) => boolean;
+  drop: (
+    event: DragEvent<HTMLElement>,
+    context: { focusEditor: () => void },
+  ) => boolean | Promise<boolean>;
+};
+
+declare module "@skriva/layout" {
   interface LayoutNodeByType {
     svg: SvgNode;
   }
@@ -74,6 +85,21 @@ export async function readSvgFileAsNode(file: File, options: SvgImportOptions = 
     ...options,
     title: options.title ?? file.name,
   });
+}
+
+export function createSvgDropHandler(options: SvgDropHandlerOptions): SvgSurfaceDropHandler {
+  return {
+    canDrop: (event) => svgFilesFromDataTransfer(event.dataTransfer).length > 0,
+    async drop(event, context) {
+      const files = svgFilesFromDataTransfer(event.dataTransfer);
+      if (files.length === 0) return false;
+
+      const nodes = await Promise.all(files.map((file) => readSvgFileAsNode(file)));
+      options.addNodes(nodes);
+      context.focusEditor();
+      return true;
+    },
+  };
 }
 
 export function createSvgNodeFromSource(source: string, options: SvgImportOptions = {}) {
@@ -112,7 +138,7 @@ export function Svg(props: SvgProps): ReactElement {
 
 export function createSvgExtension(
   options: SvgExtensionOptions = {},
-): VasaExtension<SvgExtensionRenderers> {
+): SkrivaExtension<SvgExtensionRenderers> {
   return {
     name: "svg",
     layout: svgLayoutExtension,
@@ -125,11 +151,6 @@ export function createSvgExtension(
       canvas: mergeExtensionRenderers(
         defaultSvgRenderers.canvas,
         options.renderers?.canvas,
-        options.rendererPlacement,
-      ),
-      webgl: mergeExtensionRenderers(
-        defaultSvgRenderers.webgl,
-        options.renderers?.webgl,
         options.rendererPlacement,
       ),
       pdf: mergeExtensionRenderers(
@@ -177,11 +198,10 @@ const svgRenderExtension = {
   },
 } satisfies RendererExtension;
 
-const defaultSvgRenderers = {
+const defaultSvgRenderers: SvgExtensionRenderers = {
   canvas: svgCanvasRenderer,
-  webgl: svgCanvasRenderer,
   pdf: svgPdfRenderer,
-} satisfies SvgExtensionRenderers;
+};
 
 export const SvgExtension = createSvgExtension();
 

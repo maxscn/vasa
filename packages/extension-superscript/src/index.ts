@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -14,7 +14,7 @@ export type SuperscriptExtensionRenderers = {
 };
 
 export type SuperscriptExtensionOptions = {
-  renderers?: VasaExtensionRenderers<SuperscriptExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<SuperscriptExtensionRenderers>;
 };
 
 const defaultSuperscriptRenderers = {
@@ -23,7 +23,7 @@ const defaultSuperscriptRenderers = {
 
 export function createSuperscriptExtension(
   options: SuperscriptExtensionOptions = {},
-): VasaExtension<SuperscriptExtensionRenderers> {
+): SkrivaExtension<SuperscriptExtensionRenderers> {
   return {
     name: "superscript",
     tiptap: createSuperscriptMark(),

@@ -1,45 +1,40 @@
-import {
-  type BoxNode,
-  type LayoutOptions,
-  type LayoutResult,
-  type Rect,
-  type TextStyle,
-} from "@vasa/layout";
+import { type BoxNode, type LayoutOptions, type LayoutResult, type Rect } from "@skriva/layout";
 import {
   type RenderDocument,
-  type RenderCustomNode,
   type RenderNode,
+  type RenderCustomNode,
   type RenderTextNode,
   type SvgPath,
   type TextOutlineFont,
   type TextOutlinePath,
-} from "@vasa/renderer";
-import { type ReactElement, type ReactNode } from "react";
-export type PdfPrimitiveType = string;
-export type PdfPrimitiveProps = {
-  id?: string;
-  style?: BoxNode["style"] | TextStyle;
-  children?: ReactNode;
-  [key: string]: unknown;
-};
-export type PdfTextProps = PdfPrimitiveProps & {
-  text?: string;
-};
-type PdfElementHostNode = {
-  type: string;
-  props: PdfPrimitiveProps;
-  children: PdfHostNode[];
-};
-type PdfTextInstanceHostNode = {
-  type: "textInstance";
-  text: string;
-  children: [];
-};
-export type PdfHostNode = PdfElementHostNode | PdfTextInstanceHostNode;
-export type PdfRootContainer = {
-  children: PdfHostNode[];
-};
+} from "@skriva/renderer";
+export {
+  Box,
+  Document,
+  Text,
+  View,
+  createPdfPrimitive,
+  type PdfPrimitiveComponent,
+  type PdfPrimitiveProps,
+  type PdfPrimitiveType,
+  type PdfTextProps,
+} from "./primitives.js";
+export {
+  createPdfRootContainer,
+  renderReactToLayoutTree,
+  type PdfHostNode,
+  type PdfRootContainer,
+} from "./reconciler/index.js";
 export type PdfRenderOptions = LayoutOptions & {
+  metadata?: PdfMetadata;
+  outlineText?: PdfOutlineTextOptions | PdfOutlineTextResolver;
+  textMode?: "native" | "outline" | "embedded";
+  defaultTextFill?: string;
+  selectableText?: boolean;
+  renderers?: PdfRendererExtension[];
+};
+export type PdfSceneGraphRenderOptions = {
+  page: LayoutOptions["page"];
   metadata?: PdfMetadata;
   outlineText?: PdfOutlineTextOptions | PdfOutlineTextResolver;
   textMode?: "native" | "outline" | "embedded";
@@ -106,8 +101,8 @@ export type PdfRenderNodeContext = {
   node: RenderCustomNode;
   renderNode: (node: RenderNode) => PdfCommand[];
 };
-export type PdfRenderResult = {
-  layout: LayoutResult;
+export type PdfRenderResult<TLayout = LayoutResult> = {
+  layout: TLayout;
   commands: PdfCommand[];
   bytes: Uint8Array;
   compressedBytes: () => Promise<Uint8Array>;
@@ -116,25 +111,23 @@ export type PdfEmbeddedFont = {
   font: TextOutlineFont;
   fill?: string;
 };
-export type PdfPrimitiveComponent<TProps extends PdfPrimitiveProps = PdfPrimitiveProps> = (
-  props: TProps,
-) => ReactElement;
-export declare function createPdfPrimitive<TProps extends PdfPrimitiveProps = PdfPrimitiveProps>(
-  type: PdfPrimitiveType,
-): PdfPrimitiveComponent<TProps>;
-export declare const Document: PdfPrimitiveComponent<PdfPrimitiveProps>;
-export declare const View: PdfPrimitiveComponent<PdfPrimitiveProps>;
-export declare const Box: PdfPrimitiveComponent<PdfPrimitiveProps>;
-export declare const Text: PdfPrimitiveComponent<PdfTextProps>;
 export declare function renderDocumentToPdf(
   document: BoxNode,
   options: PdfRenderOptions,
 ): PdfRenderResult;
+export declare function renderSceneGraphToPdf(
+  document: RenderDocument,
+  options: PdfSceneGraphRenderOptions,
+): PdfRenderResult<undefined>;
 export declare function renderReactToPdf(
   element: unknown,
   options: PdfRenderOptions,
 ): PdfRenderResult;
-export declare function renderReactToLayoutTree(element: unknown): BoxNode;
+export declare class MissingPdfCoverageError extends Error {
+  readonly sceneNodeName: string;
+  readonly code = "missing-pdf-coverage";
+  constructor(sceneNodeName: string);
+}
 export declare function createPdfCommands(
   document: LayoutResult | RenderDocument,
   page: LayoutOptions["page"],
@@ -153,4 +146,3 @@ export declare function writePdfAsync(
   page: LayoutOptions["page"],
   metadata?: PdfMetadata,
 ): Promise<Uint8Array>;
-export declare function createPdfRootContainer(): PdfRootContainer;

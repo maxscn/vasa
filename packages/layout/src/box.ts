@@ -7,6 +7,13 @@ import Yoga, {
   MeasureMode as YogaMeasureMode,
   type Node as YogaNode,
 } from "yoga-layout";
+import { EMPTY_BOX_SIZE, UNBOUNDED_MEASURE_WIDTH } from "./constants.js";
+import {
+  createPageGeometry,
+  isPageGeometry,
+  pageGeometryFromContent,
+  resolveEdges,
+} from "./geometry.js";
 import { paginatePrimitives } from "./pagination.ts";
 import { createPretextTextMeasurer, defaultLayoutExtensions } from "./text.ts";
 import type {
@@ -25,11 +32,8 @@ import type {
   MeasureMode,
   MeasurableStyle,
   PageGeometry,
-  PageMarginGuide,
   Rect,
-  ResolvedBoxEdges,
   TextMeasurer,
-  UpdatePageMarginGuideOptions,
 } from "./types.ts";
 
 type BuiltNode = {
@@ -122,100 +126,6 @@ export function layoutPage(
   }
 }
 
-export function createPageGeometry(page: {
-  width: number;
-  height: number;
-  margin?: BoxEdges;
-}): PageGeometry {
-  const margin = resolveEdges(page.margin);
-  const bounds = { x: 0, y: 0, width: page.width, height: page.height };
-  const content = contentRectForPage(bounds, margin);
-
-  return {
-    bounds,
-    content,
-    margin,
-    guides: pageMarginGuides(bounds, margin),
-  };
-}
-
-export function resolvePageMargin(margin: BoxEdges | undefined): ResolvedBoxEdges {
-  return resolveEdges(margin);
-}
-
-export function updatePageMarginGuide(
-  page: { width: number; height: number; margin?: BoxEdges },
-  guide: PageMarginGuide,
-  position: number,
-  options: UpdatePageMarginGuideOptions = {},
-): ResolvedBoxEdges {
-  const margin = resolveEdges(page.margin);
-  const minContentWidth = options.minContentWidth ?? 1;
-  const minContentHeight = options.minContentHeight ?? 1;
-
-  if (guide === "left") {
-    return {
-      ...margin,
-      left: clamp(position, 0, page.width - margin.right - minContentWidth),
-    };
-  }
-
-  if (guide === "right") {
-    return {
-      ...margin,
-      right: clamp(page.width - position, 0, page.width - margin.left - minContentWidth),
-    };
-  }
-
-  if (guide === "top") {
-    return {
-      ...margin,
-      top: clamp(position, 0, page.height - margin.bottom - minContentHeight),
-    };
-  }
-
-  return {
-    ...margin,
-    bottom: clamp(page.height - position, 0, page.height - margin.top - minContentHeight),
-  };
-}
-
-function pageGeometryFromContent(content: Rect): PageGeometry {
-  return {
-    bounds: { x: 0, y: 0, width: content.x + content.width, height: content.y + content.height },
-    content,
-    margin: { top: content.y, right: 0, bottom: 0, left: content.x },
-    guides: {
-      top: content.y,
-      right: content.x + content.width,
-      bottom: content.y + content.height,
-      left: content.x,
-    },
-  };
-}
-
-function isPageGeometry(value: Rect | PageGeometry): value is PageGeometry {
-  return "margin" in value && "content" in value && "guides" in value;
-}
-
-function contentRectForPage(bounds: Rect, margin: ResolvedBoxEdges): Rect {
-  return {
-    x: bounds.x + margin.left,
-    y: bounds.y + margin.top,
-    width: Math.max(0, bounds.width - margin.left - margin.right),
-    height: Math.max(0, bounds.height - margin.top - margin.bottom),
-  };
-}
-
-function pageMarginGuides(bounds: Rect, margin: ResolvedBoxEdges) {
-  return {
-    top: bounds.y + margin.top,
-    right: bounds.x + bounds.width - margin.right,
-    bottom: bounds.y + bounds.height - margin.bottom,
-    left: bounds.x + margin.left,
-  };
-}
-
 function buildYogaTree(
   source: LayoutNode,
   measurer: TextMeasurer,
@@ -236,7 +146,9 @@ function buildYogaTree(
     applyMeasurableStyle(yoga, source.style);
     yoga.setMeasureFunc((width, widthMode) => {
       const maxWidth =
-        widthMode === YogaMeasureMode.Undefined ? Number.MAX_SAFE_INTEGER : Math.max(0, width);
+        widthMode === YogaMeasureMode.Undefined
+          ? UNBOUNDED_MEASURE_WIDTH
+          : Math.max(EMPTY_BOX_SIZE, width);
       const measurement = registry.measure(source, {
         width,
         widthMode: toLayoutMeasureMode(widthMode),
@@ -274,7 +186,7 @@ function createLayoutRegistry(extensions: AnyLayoutExtension[] = []): LayoutRegi
         if (measurement !== undefined) return measurement;
       }
 
-      return { width: 0, height: 0 };
+      return { width: EMPTY_BOX_SIZE, height: EMPTY_BOX_SIZE };
     },
     materialize(node, input) {
       for (const extension of registered) {
@@ -396,21 +308,4 @@ function applyEdges(edges: BoxEdges | undefined, apply: (edge: Edge, value: numb
   apply(Edge.Right, resolved.right);
   apply(Edge.Bottom, resolved.bottom);
   apply(Edge.Left, resolved.left);
-}
-
-function resolveEdges(edges: BoxEdges | undefined) {
-  if (typeof edges === "number") {
-    return { top: edges, right: edges, bottom: edges, left: edges };
-  }
-
-  return {
-    top: edges?.top ?? edges?.vertical ?? 0,
-    right: edges?.right ?? edges?.horizontal ?? 0,
-    bottom: edges?.bottom ?? edges?.vertical ?? 0,
-    left: edges?.left ?? edges?.horizontal ?? 0,
-  };
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }

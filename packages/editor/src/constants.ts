@@ -1,0 +1,15 @@
+export const EDITOR_CLIPBOARD_MIME_TYPE = "application/x-skriva-editor+json";
+export const MIN_PAGE_BREAK_SPACER_HEIGHT = 1;
+export const EMPTY_BLOCK_GAP = 0;
+export const DEFAULT_HEADING_FONT_WEIGHT = "700";
+export const DEFAULT_TABLE_BORDER_COLOR = "#cbd5e1";
+export const DEFAULT_TABLE_BORDER_WIDTH = 1;
+export const HORIZONTAL_RULE_VERTICAL_MARGIN = 8;
+export const HORIZONTAL_RULE_HEIGHT = 12;
+export const BLOCKQUOTE_BORDER_COLOR = "#d1d5db";
+export const BLOCKQUOTE_BORDER_WIDTH = 3;
+export const BLOCKQUOTE_PADDING_LEFT = 16;
+export const BLOCKQUOTE_VERTICAL_MARGIN = 24;
+export const SMALL_HEADING_TOP_MARGIN = 8;
+export const LARGE_HEADING_TOP_MARGIN = 10;
+export const HEADING_BOTTOM_MARGIN = 4;

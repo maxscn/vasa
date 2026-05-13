@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { compress } from "wawoff2";
 import {
+  createFontCatalog,
   createCanvasFontValue,
   createCssFontFamily,
   createFontItalicSkew,
@@ -13,6 +14,9 @@ import {
   createGoogleFontDescriptor,
   createStandardFontMetrics,
   googleFontUrlFromCss,
+  IncompleteControlledFontFamilyError,
+  MissingFontFaceError,
+  type SkrivaFont,
 } from "../src/index.ts";
 
 const liberationSansBytes = () =>
@@ -54,7 +58,7 @@ test("registers native Google fonts with standardized metrics", async () => {
 test("registers font bytes with outline data and metrics", async () => {
   const registry = createFontRegistry();
   const font = await registry.register({
-    family: "Vasa Liberation Sans",
+    family: "Skriva Liberation Sans",
     displayName: "Liberation Sans",
     source: liberationSansBytes(),
   });
@@ -125,6 +129,55 @@ test("describes Google italic faces with distinct ids and style metadata", () =>
   });
 });
 
+test("fails immediately when a controlled Google font family is incomplete", () => {
+  expect(() =>
+    createFontCatalog({
+      fonts: [fontFace("Fixture Sans", "400", "normal")],
+      controlledFamilies: ["Fixture Sans"],
+      manifest: [
+        {
+          family: "Fixture Sans",
+          faces: [
+            { weight: "400", style: "normal" },
+            { weight: "700", style: "normal" },
+          ],
+        },
+      ],
+    }),
+  ).toThrow(IncompleteControlledFontFamilyError);
+});
+
+test("resolves registered controlled font faces without synthetic fallback", () => {
+  const regular = fontFace("Fixture Sans", "400", "normal");
+  const bold = fontFace("Fixture Sans", "700", "normal");
+  const catalog = createFontCatalog({
+    fonts: [regular, bold],
+    controlledFamilies: ["Fixture Sans"],
+    manifest: [
+      {
+        family: "Fixture Sans",
+        faces: [
+          { weight: "400", style: "normal" },
+          { weight: "700", style: "normal" },
+        ],
+      },
+    ],
+  });
+
+  expect(catalog.resolveFace({ family: "Fixture Sans" })).toBe(regular);
+  expect(catalog.resolveFace({ family: "Fixture Sans", weight: "700" })).toBe(bold);
+  expect(() =>
+    catalog.resolveFace({ family: "Fixture Sans", weight: "400", style: "italic" }),
+  ).toThrow(MissingFontFaceError);
+});
+
+test("ignores uncontrolled system fonts during completeness validation", () => {
+  const system = fontFace("Arial", "400", "normal");
+  const catalog = createFontCatalog({ fonts: [system] });
+
+  expect(catalog.resolveFace({ family: "Arial" })).toBe(system);
+});
+
 test.each([
   {
     family: "Arimo",
@@ -132,7 +185,7 @@ test.each([
     source: arimoBytes,
   },
   {
-    family: "Vasa Liberation Sans",
+    family: "Skriva Liberation Sans",
     displayName: "Liberation Sans",
     source: liberationSansBytes,
   },
@@ -204,3 +257,20 @@ test("creates canvas font strings with quoted family names", () => {
     'normal 600 18px "Source Serif 4", serif',
   );
 });
+
+function fontFace(family: string, weight: string, style: string): SkrivaFont {
+  const fallbackFamilies = ["Arial", "sans-serif"];
+  return {
+    id: `${family.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}-${weight}-${style}`,
+    family,
+    displayName: family,
+    weight,
+    style,
+    fallbackFamilies,
+    cssFamily: createCssFontFamily(family, fallbackFamilies),
+    data: {
+      kind: "native",
+      metrics: createStandardFontMetrics({ family, fallbackFamilies }),
+    },
+  };
+}

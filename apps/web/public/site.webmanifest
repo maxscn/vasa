@@ -1,6 +1,6 @@
 {
-  "name": "MyWebSite",
-  "short_name": "MySite",
+  "name": "Skriva",
+  "short_name": "Skriva",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",

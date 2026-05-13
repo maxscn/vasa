@@ -76,7 +76,7 @@ textarea {
 }
 
 .editor-toolbar > div:first-child::before {
-  background: url("/vasa.svg") center / contain no-repeat;
+  background: url("/skriva.svg") center / contain no-repeat;
   content: "";
   display: block;
   height: 31px;

@@ -1,12 +1,9 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { SvgNode } from "@vasa/extension-svg";
-import type { UseEditorPdfReturn, UseEditorReturn } from "@vasa/editor";
+import type { SkrivaEditorShellContextValue } from "@opeinspection/skriva/react";
 import type { MarginPresetId, PagePresetId } from "./presets";
 
-export type EditorShellContextValue = {
-  editor: UseEditorReturn;
-  pdf: UseEditorPdfReturn;
-  addDroppedSvgNodes: (nodes: SvgNode[]) => void;
+export type EditorShellContextValue = SkrivaEditorShellContextValue & {
+  pdf: NonNullable<SkrivaEditorShellContextValue["pdf"]>;
   marginPreset: MarginPresetId;
   pagePreset: PagePresetId;
   setMarginPreset: (preset: MarginPresetId) => void;

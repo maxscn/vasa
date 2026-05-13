@@ -1,15 +1,15 @@
-import type { RenderDocument } from "@vasa/renderer";
-import type { UseEditorReturn } from "./use-editor.ts";
+import type { RenderDocument } from "@skriva/renderer";
+import type { UseSkrivaEditorReturn } from "./use-editor.ts";
 
-type EditorJsonLike = {
+type JSONContentNodeLike = {
   type: string;
   content?: unknown[];
 };
 
 type RenderPage = RenderDocument["pages"][number];
 
-export function preferredSelectableFonts(fonts: UseEditorReturn["fonts"]) {
-  return fonts.reduce<UseEditorReturn["fonts"]>((selectable, font) => {
+export function preferredSelectableFonts(fonts: UseSkrivaEditorReturn["fonts"]) {
+  return fonts.reduce<UseSkrivaEditorReturn["fonts"]>((selectable, font) => {
     const index = selectable.findIndex((candidate) => candidate.family === font.family);
     if (index === -1) return [...selectable, font];
     if (isPreferredSelectableFont(font, selectable[index])) {
@@ -22,8 +22,8 @@ export function preferredSelectableFonts(fonts: UseEditorReturn["fonts"]) {
 }
 
 function isPreferredSelectableFont(
-  font: UseEditorReturn["fonts"][number],
-  selected: UseEditorReturn["fonts"][number] | undefined,
+  font: UseSkrivaEditorReturn["fonts"][number],
+  selected: UseSkrivaEditorReturn["fonts"][number] | undefined,
 ) {
   if (selected === undefined) return true;
   if (font.style === "normal" && selected.style !== "normal") return true;
@@ -31,19 +31,15 @@ function isPreferredSelectableFont(
   return isRegularFontWeight(font.weight) && !isRegularFontWeight(selected.weight);
 }
 
-export function isSelectionInsideEditorNodeType(
-  doc: EditorJsonLike,
-  path: number[],
-  nodeType: string,
-) {
+export function isSelectionInsideEditorNodeType(doc: unknown, path: number[], nodeType: string) {
   let node: unknown = doc;
 
   for (const index of path) {
-    if (isEditorJsonNode(node) && node.type === nodeType) return true;
-    node = isEditorJsonNode(node) ? node.content?.[index] : undefined;
+    if (isJSONContentNode(node) && node.type === nodeType) return true;
+    node = isJSONContentNode(node) ? node.content?.[index] : undefined;
   }
 
-  return isEditorJsonNode(node) && node.type === nodeType;
+  return isJSONContentNode(node) && node.type === nodeType;
 }
 
 export function selectedRenderPageIndex(document: RenderDocument, selectionPathParts: number[]) {
@@ -67,7 +63,7 @@ export function pageCanvasY(page: RenderPage, ordinal: number, pageGap: number) 
 }
 
 export function scrollEditorCanvasToPage(
-  editor: UseEditorReturn,
+  editor: UseSkrivaEditorReturn,
   pageIndex: number,
   behavior: ScrollBehavior,
 ) {
@@ -108,7 +104,7 @@ function findRenderNode(nodes: RenderPage["nodes"], match: (sourceId: string) =>
   return false;
 }
 
-function isEditorJsonNode(value: unknown): value is EditorJsonLike {
+function isJSONContentNode(value: unknown): value is JSONContentNodeLike {
   return (
     typeof value === "object" &&
     value !== null &&

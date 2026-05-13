@@ -1,4 +1,4 @@
-import type { PdfRendererExtension } from "@vasa/pdf";
+import type { PdfRendererExtension } from "@skriva/pdf";
 import { horizontalRuleColor, horizontalRuleRect } from "./shared.js";
 
 export const horizontalRulePdfRenderer = {

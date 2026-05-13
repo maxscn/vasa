@@ -1,5 +1,5 @@
-import type { PdfRendererExtension } from "@vasa/pdf";
-import { transformSvgPath } from "@vasa/renderer";
+import type { PdfRendererExtension } from "@skriva/pdf";
+import { transformSvgPath } from "@skriva/renderer";
 import { svgPathsFromProps } from "./shared.js";
 
 export const svgPdfRenderer = {

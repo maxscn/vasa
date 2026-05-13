@@ -1,5 +1,5 @@
 {
-  "name": "@vasa/canvas",
+  "name": "@skriva/canvas",
   "version": "0.0.0",
   "description": "A starter for creating a TypeScript package.",
   "homepage": "https://github.com/author/library#readme",
@@ -19,6 +19,7 @@
   "exports": {
     ".": "./dist/index.mjs",
     "./box": "./dist/box.mjs",
+    "./commands": "./dist/commands.mjs",
     "./document": "./dist/document.mjs",
     "./primitives": "./dist/primitives.mjs",
     "./text": "./dist/text.mjs",
@@ -35,8 +36,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/layout": "workspace:*",
-    "@vasa/renderer": "workspace:*",
+    "@skriva/layout": "workspace:*",
+    "@skriva/renderer": "workspace:*",
     "react-reconciler": "catalog:"
   },
   "devDependencies": {

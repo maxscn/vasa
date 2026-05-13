@@ -1,2 +1,10 @@
-import type { CanvasRendererExtension } from "@vasa/canvas";
-export declare const tableCanvasRenderer: CanvasRendererExtension;
+export declare const tableCanvasRenderer: {
+  name: string;
+  toCanvasNodes({
+    node,
+    yOffset,
+    renderNode,
+  }: import("@skriva/canvas").CanvasRenderNodeContext):
+    | import("@skriva/canvas").CanvasSerializableNode[]
+    | undefined;
+};

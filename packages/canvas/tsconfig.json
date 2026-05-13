@@ -16,7 +16,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "@vasa/renderer": ["../renderer/src/index.ts"]
+      "@skriva/renderer": ["../renderer/src/index.ts"]
     },
     "skipLibCheck": true
   },

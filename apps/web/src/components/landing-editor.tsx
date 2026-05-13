@@ -1,18 +1,11 @@
+import { type CanvasSurface } from "@opeinspection/skriva/canvas";
 import {
-  buildCanvasScene,
-  createCanvasRenderer,
-  type CanvasRendererExtension,
-  type CanvasSurface,
-} from "@vasa/canvas";
-import { collectExtensionRenderers, collectLayoutExtensions } from "@vasa/core";
+  createSkrivaHeadlessRenderModel,
+  inspectSkrivaHeadlessRenderModel,
+} from "@opeinspection/skriva/headless";
 import {
   applyEditorControllerAction,
   createSelection,
-  createEditorCanvasTextPaint,
-  createEditorLayoutTree,
-  createEditorPdfOutlineText,
-  createEditorRenderResolveTextStyle,
-  createEditorRenderTextStyle,
   createEditorExtensionKeymap,
   defaultEditorExtensions,
   editorKeyForEvent,
@@ -24,15 +17,18 @@ import {
   toggleBold,
   toggleCurrentBlockquote,
   type EditorKeymapOptions,
-  type EditorJson,
+  type JSONContent,
   type EditorMarkSpec,
   type EditorSelection,
   type EditorSelectionPoint,
-} from "@vasa/editor";
-import { createCanvasFontValue, createStandardFontMetrics, type VasaFont } from "@vasa/font";
-import { layoutDocument, type Rect, type TextMeasurer } from "@vasa/layout";
-import { renderDocumentToPdf } from "@vasa/pdf";
-import { createRenderDocument, type RenderDocument } from "@vasa/renderer";
+} from "@opeinspection/skriva";
+import {
+  createCanvasFontValue,
+  createStandardFontMetrics,
+  type SkrivaFont,
+} from "@opeinspection/skriva/font";
+import { type Rect, type TextMeasurer } from "@opeinspection/skriva/layout";
+import { type RenderDocument } from "@opeinspection/skriva/renderer";
 import {
   ChevronDown,
   Columns2,
@@ -65,7 +61,7 @@ const lineHeight = 19;
 const textCharWidth = 8;
 const documentExtensions: never[] = [];
 
-const fallbackFont: VasaFont = {
+const fallbackFont: SkrivaFont = {
   id: "arimo",
   family: "Arimo",
   displayName: "Arimo",
@@ -76,7 +72,7 @@ const fallbackFont: VasaFont = {
   data: { kind: "native", metrics: createStandardFontMetrics({ family: "Arimo" }) },
 };
 
-const initialText = `Vasa
+const initialText = `Skriva
 
 A canvas based text editor
 with a 1 to 1 mapping to PDF.
@@ -86,7 +82,7 @@ Every pixel on the canvas maps to the PDF.
 No surprises. No reflow. Just clarity.`;
 
 export function LandingEditor() {
-  const [editorDocument, setEditorDocument] = useState<EditorJson>(() =>
+  const [editorDocument, setEditorDocument] = useState<JSONContent>(() =>
     textToEditorDocument(initialText),
   );
   const [selection, setSelection] = useState<EditorSelection>({ path: [1, 0], offset: 0 });
@@ -121,55 +117,33 @@ export function LandingEditor() {
     }),
     [],
   );
-  const editorTextStyle = useMemo(
-    () => createEditorRenderTextStyle(renderProfile),
-    [renderProfile],
-  );
-  const resolveTextStyle = useMemo(
-    () => createEditorRenderResolveTextStyle(renderProfile),
-    [renderProfile],
-  );
-  const layoutTree = useMemo(
+  const renderModel = useMemo(
     () =>
-      createEditorLayoutTree(editorDocument, {
+      createSkrivaHeadlessRenderModel({
+        document: editorDocument,
+        page,
+        profile: renderProfile,
+        measurer: textMeasurer,
+        enrichments: documentExtensions,
         rootStyle: { gap: 15 },
         paragraphStyle: { flexDirection: "column" },
-        textStyle: editorTextStyle,
-        resolveTextStyle,
       }),
-    [editorDocument, editorTextStyle, resolveTextStyle],
+    [editorDocument, renderProfile, textMeasurer],
   );
-  const layout = useMemo(
-    () =>
-      layoutDocument(layoutTree, {
-        page,
-        measurer: textMeasurer,
-        extensions: collectLayoutExtensions(documentExtensions),
-      }),
-    [layoutTree, textMeasurer],
+  const renderModelInspection = useMemo(
+    () => inspectSkrivaHeadlessRenderModel(renderModel),
+    [renderModel],
   );
-  const renderDocument = useMemo(() => createRenderDocument(layout), [layout]);
-  const canvasRenderers = useMemo(
-    () => collectExtensionRenderers(documentExtensions, "canvas") as CanvasRendererExtension[],
-    [],
-  );
-  const canvasScene = useMemo(
-    () => buildCanvasScene(renderDocument, { pageGap, extensions: canvasRenderers }),
-    [canvasRenderers, renderDocument],
-  );
+  const renderDocument = renderModelInspection.documentSceneGraph;
+  const canvasScene = useMemo(() => renderModel.createCanvasScene({ pageGap }), [renderModel]);
   const pdfResult = useMemo(
     () =>
-      renderDocumentToPdf(layoutTree, {
-        page,
-        measurer: textMeasurer,
-        extensions: collectLayoutExtensions(documentExtensions),
-        metadata: { title: "Vasa landing document", author: "Vasa" },
+      renderModel.renderPdf({
+        metadata: { title: "Skriva landing document", author: "Skriva" },
         defaultTextFill: renderProfile.textColor,
-        outlineText: (node, lineIndex) =>
-          createEditorPdfOutlineText(editorDocument, renderProfile, node, lineIndex),
         textMode: "embedded",
       }),
-    [editorDocument, layoutTree, renderProfile, textMeasurer],
+    [renderModel, renderProfile.textColor],
   );
 
   useEffect(() => {
@@ -195,20 +169,17 @@ export function LandingEditor() {
     canvas.style.height = `${height * previewScale}px`;
 
     context.setTransform(scale, 0, 0, scale, 0, 0);
-    createCanvasRenderer(domCanvasSurface(context, editorCanvasFont), {
+    renderModel.renderCanvas(domCanvasSurface(context, editorCanvasFont), {
       pageGap,
-      extensions: canvasRenderers,
-      text: (box, lineIndex) =>
-        createEditorCanvasTextPaint(editorDocument, renderProfile, box, lineIndex),
-    }).render(renderDocument);
+    });
     drawCaret(context, scale, renderDocument, selection, measureText);
   }, [
-    canvasRenderers,
     canvasScene,
     editorCanvasFont,
     editorDocument,
     renderDocument,
     renderProfile,
+    renderModel,
     measureText,
     selection,
   ]);
@@ -219,10 +190,10 @@ export function LandingEditor() {
 
   function applyEditorMutation(
     mutate: (
-      doc: EditorJson,
+      doc: JSONContent,
       currentSelection: EditorSelection,
     ) => {
-      doc: EditorJson;
+      doc: JSONContent;
       selection: EditorSelection;
     },
   ) {
@@ -322,7 +293,6 @@ export function LandingEditor() {
       renderDocument,
       renderLineOptions: { pageHeight: page.height, pageGap },
       measureText,
-      updateEditor: () => {},
       updateSelection: (nextSelection) =>
         updateSelection(
           typeof nextSelection === "function" ? nextSelection(selectionRef.current) : nextSelection,
@@ -348,10 +318,10 @@ export function LandingEditor() {
   function toggleExtensionMark(
     type: string,
     mutate: (
-      doc: EditorJson,
+      doc: JSONContent,
       currentSelection: EditorSelection,
     ) => {
-      doc: EditorJson;
+      doc: JSONContent;
       selection: EditorSelection;
     },
     attrs: Record<string, unknown> = {},
@@ -401,7 +371,7 @@ export function LandingEditor() {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "vasa-document.pdf";
+    anchor.download = "skriva-document.pdf";
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
@@ -409,11 +379,11 @@ export function LandingEditor() {
   }
 
   return (
-    <section className="real-editor-hero" aria-label="Interactive vasa editor">
+    <section className="real-editor-hero" aria-label="Interactive skriva editor">
       <div className="real-editor-toolbar">
-        <a className="real-editor-brand" href="/" aria-label="Vasa home">
-          <img alt="" aria-hidden="true" className="real-editor-mark" src="/vasa.svg" />
-          <span>Vasa</span>
+        <a className="real-editor-brand" href="/" aria-label="Skriva home">
+          <img alt="" aria-hidden="true" className="real-editor-mark" src="/skriva.svg" />
+          <span>Skriva</span>
         </a>
         <div className="real-editor-tools" aria-label="Editor tools">
           <Button
@@ -621,7 +591,7 @@ function domCanvasSurface(context: CanvasRenderingContext2D, defaultFont: string
   };
 }
 
-function textToEditorDocument(value: string): EditorJson {
+function textToEditorDocument(value: string): JSONContent {
   return {
     type: "doc",
     content: value.split(/\n{2,}/g).map((paragraph) => ({

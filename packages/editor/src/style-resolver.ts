@@ -1,22 +1,24 @@
 import {
   createCanvasFontValue,
+  createFontCatalog,
   createFontScriptStyle,
   createFontStrikeoutStyle,
-  type VasaFont,
-} from "@vasa/font";
-import type { TextStyle } from "@vasa/layout";
+  type FontCatalog,
+  type SkrivaFont,
+} from "@skriva/font";
+import type { TextStyle } from "@skriva/layout";
 import { createEditorTextStyleForFont } from "./font.ts";
 import {
   defaultEditorMarkExtensions,
   type EditorMarkExtension,
   type EditorTextStyleAttributes,
 } from "./font-attributes.ts";
-import type { EditorJson } from "./index.ts";
+import type { JSONContent } from "@skriva/core";
 
 export type EditorRenderProfileOptions = {
-  fonts: VasaFont[];
+  fonts: SkrivaFont[];
   defaultFontId: string;
-  fallbackFont: VasaFont;
+  fallbackFont: SkrivaFont;
   fontSize: number;
   lineHeight: number;
   textColor?: string;
@@ -25,6 +27,7 @@ export type EditorRenderProfileOptions = {
   italicSkewX?: number;
   outlinePixelSnap?: number;
   scriptScale?: number;
+  fontCatalog?: FontCatalog;
   stylesheets?: EditorTextStylesheet[];
 };
 
@@ -37,18 +40,20 @@ export type EditorTextLineSource = {
   color?: string;
 };
 
+const defaultFontCatalogCache = new WeakMap<EditorRenderProfileOptions, FontCatalog>();
+
 export type EditorCanvasTextPaint = {
   fill: string;
   font: string;
   fontSize: number;
-  outlineFont?: VasaFont["outlineFont"];
+  outlineFont?: SkrivaFont["outlineFont"];
   embolden?: number;
   pixelSnap?: number;
   skewX?: number;
 };
 
 export type EditorPdfOutlineText = {
-  font: NonNullable<VasaFont["outlineFont"]>;
+  font: NonNullable<SkrivaFont["outlineFont"]>;
   fontSize: number;
   fill: string;
   embolden?: number;
@@ -69,13 +74,11 @@ export type EditorRenderTextNodeSource = {
 export type EditorTextStylesheetContext = {
   attrs: EditorTextStyleAttributes;
   profile: EditorRenderProfileOptions;
-  font: VasaFont;
-  familyFont: VasaFont;
+  font: SkrivaFont;
+  familyFont: SkrivaFont;
   fontSize: number;
   fontWeight: string;
   fontStyle: string;
-  syntheticBold: boolean;
-  syntheticItalic: boolean;
   line?: EditorTextLineSource;
   sourceId?: string;
 };
@@ -97,7 +100,7 @@ export type EditorTextStylesheet = {
 
 export type CreateEditorTextStyleResolverOptions = {
   profile: EditorRenderProfileOptions;
-  doc?: EditorJson;
+  doc?: JSONContent;
   markExtensions?: EditorMarkExtension[];
 };
 
@@ -203,11 +206,7 @@ export function resolveEditorCanvasTextPaint(
       ),
     fontSize: context.fontSize,
     outlineFont: context.familyFont.outlineFont,
-    embolden: boldOutlineOffset(context),
     pixelSnap: options.outlinePixelSnap,
-    skewX: context.syntheticItalic
-      ? (createEditorFontItalicSkew(context.familyFont) ?? options.italicSkewX ?? 0.35)
-      : undefined,
   };
 
   return applyCanvasTextPaintStylesheets(options, context, paint);
@@ -226,18 +225,14 @@ export function resolveEditorPdfOutlineText(
           font: context.familyFont.outlineFont,
           fontSize: context.fontSize,
           fill: line?.color ?? attrs.color ?? options.textColor ?? "#111111",
-          embolden: boldOutlineOffset(context),
           pixelSnap: options.outlinePixelSnap,
-          skewX: context.syntheticItalic
-            ? (createEditorFontItalicSkew(context.familyFont) ?? options.italicSkewX ?? 0.35)
-            : undefined,
         };
   const resolved = applyPdfOutlineTextStylesheets(options, context, paint);
   return resolved?.font === undefined ? undefined : resolved;
 }
 
 export function textStyleAttrsForSourceId(
-  doc: EditorJson | undefined,
+  doc: JSONContent | undefined,
   sourceId: string | undefined,
   markExtensions: EditorMarkExtension[] = defaultEditorMarkExtensions,
 ): EditorTextStyleAttributes {
@@ -275,11 +270,7 @@ function createTextStylesheetContext(
     : fontSizeBase;
   const fontWeight = line?.fontWeight ?? attrs.fontWeight ?? font.weight;
   const fontStyle = line?.fontStyle ?? attrs.fontStyle ?? font.style;
-  const {
-    font: familyFont,
-    syntheticBold,
-    syntheticItalic,
-  } = fontFaceForStyle(options, font, fontWeight, fontStyle);
+  const familyFont = fontFaceForStyle(options, font, fontWeight, fontStyle);
 
   return {
     attrs,
@@ -289,8 +280,6 @@ function createTextStylesheetContext(
     fontSize,
     fontWeight,
     fontStyle,
-    syntheticBold,
-    syntheticItalic,
     line,
     sourceId: line?.sourceId,
   };
@@ -340,7 +329,7 @@ function applyPdfOutlineTextStylesheets(
 
 function resolveBaselineShift(
   options: EditorRenderProfileOptions,
-  font: VasaFont,
+  font: SkrivaFont,
   attrs: EditorTextStyleAttributes,
 ) {
   const fontSizeBase = attrs.fontSize ?? options.fontSize;
@@ -369,47 +358,14 @@ function fontById(options: EditorRenderProfileOptions, fontId: string) {
 
 function fontFaceForStyle(
   options: EditorRenderProfileOptions,
-  font: VasaFont,
+  font: SkrivaFont,
   weight: string,
   style: string,
-): { font: VasaFont; syntheticBold: boolean; syntheticItalic: boolean } {
-  const face = options.fonts.find(
-    (candidate) =>
-      candidate.family === font.family && candidate.weight === weight && candidate.style === style,
-  );
-
-  if (face !== undefined) return { font: face, syntheticBold: false, syntheticItalic: false };
-
-  const weightFace = options.fonts.find(
-    (candidate) => candidate.family === font.family && candidate.weight === weight,
-  );
-  if (weightFace !== undefined) {
-    return {
-      font: weightFace,
-      syntheticBold: false,
-      syntheticItalic: isItalicFontStyle(style) && !isItalicFontStyle(weightFace.style),
-    };
-  }
-
-  const styleFace = options.fonts.find(
-    (candidate) => candidate.family === font.family && candidate.style === style,
-  );
-  if (styleFace !== undefined) {
-    return {
-      font: styleFace,
-      syntheticBold: isSyntheticBoldWeight(weight, styleFace.weight),
-      syntheticItalic: false,
-    };
-  }
-
-  return {
-    font,
-    syntheticBold: isSyntheticBoldWeight(weight, font.weight),
-    syntheticItalic: isItalicFontStyle(style) && !isItalicFontStyle(font.style),
-  };
+): SkrivaFont {
+  return editorFontCatalog(options).resolveFace({ family: font.family, weight, style });
 }
 
-function mixedFontBaselineShift(referenceFont: VasaFont, font: VasaFont, fontSize: number) {
+function mixedFontBaselineShift(referenceFont: SkrivaFont, font: SkrivaFont, fontSize: number) {
   if (font.id === referenceFont.id) return undefined;
 
   const referenceAscent = ascentRatio(referenceFont);
@@ -420,45 +376,18 @@ function mixedFontBaselineShift(referenceFont: VasaFont, font: VasaFont, fontSiz
   return Math.abs(shift) < 0.01 ? undefined : shift;
 }
 
-function ascentRatio(font: Pick<VasaFont, "data">) {
+function ascentRatio(font: Pick<SkrivaFont, "data">) {
   const metrics = font.data.metrics;
   if (metrics === undefined || metrics.unitsPerEm <= 0) return undefined;
   return metrics.ascender / metrics.unitsPerEm;
 }
 
-function isItalicFontStyle(fontStyle: string | undefined) {
-  return fontStyle === "italic" || fontStyle === "oblique";
-}
-
-function isSyntheticBoldWeight(requestedWeight: string, sourceWeight: string) {
-  return isBoldFontWeight(requestedWeight) && !isBoldFontWeight(sourceWeight);
-}
-
-function isBoldFontWeight(weight: string | undefined) {
-  const parsed = Number.parseInt(weight ?? "", 10);
-  if (Number.isFinite(parsed)) return parsed >= 600;
-  return weight === "bold" || weight === "bolder";
-}
-
-function boldOutlineOffset(
-  context: Pick<
-    EditorTextStylesheetContext,
-    "fontSize" | "fontWeight" | "familyFont" | "syntheticBold"
-  >,
-) {
-  if (!isBoldFontWeight(context.fontWeight)) return undefined;
-  if (context.syntheticBold) {
-    return fauxBoldOffset(context.fontWeight, context.familyFont.weight, context.fontSize);
-  }
-  return undefined;
-}
-
 function createEditorFontUnderlineStyle(
-  font: Pick<VasaFont, "data">,
+  font: Pick<SkrivaFont, "data">,
   options: { fontSize: number },
 ) {
   const metrics = font.data.metrics as
-    | (NonNullable<VasaFont["data"]["metrics"]> & {
+    | (NonNullable<SkrivaFont["data"]["metrics"]> & {
         underlinePosition?: number;
         underlineThickness?: number;
       })
@@ -486,31 +415,28 @@ function createEditorFontUnderlineStyle(
   };
 }
 
-function createEditorFontItalicSkew(font: Pick<VasaFont, "data">) {
-  const metrics = font.data.metrics as
-    | (NonNullable<VasaFont["data"]["metrics"]> & { italicAngle?: number })
-    | undefined;
-  const angle = metrics?.italicAngle;
-  if (angle === undefined || angle === 0) return undefined;
-  return Math.tan((-angle * Math.PI) / 180);
-}
-
 function positive(value: number | undefined) {
   return value === undefined || value <= 0 ? undefined : value;
 }
 
-function fauxBoldOffset(requestedWeight: string, sourceWeight: string, fontSize: number) {
-  const requested = Number.parseInt(requestedWeight, 10);
-  const source = Number.parseInt(sourceWeight, 10);
-  if (!Number.isFinite(requested) || !Number.isFinite(source)) return undefined;
-  if (requested < 600) return undefined;
-  return Math.max(0.75, Math.min(1.4, fontSize * 0.07));
+function editorFontCatalog(options: EditorRenderProfileOptions) {
+  if (options.fontCatalog !== undefined) return options.fontCatalog;
+
+  const cached = defaultFontCatalogCache.get(options);
+  if (cached !== undefined) return cached;
+
+  const catalog = createFontCatalog({
+    fonts: options.fonts,
+    controlledFamilies: [],
+  });
+  defaultFontCatalogCache.set(options, catalog);
+  return catalog;
 }
 
-function getEditorNodeAtSourceId(doc: EditorJson | undefined, sourceId: string | undefined) {
+function getEditorNodeAtSourceId(doc: JSONContent | undefined, sourceId: string | undefined) {
   if (doc === undefined || sourceId === undefined || sourceId.length === 0) return undefined;
 
-  return sourceId.split(".").reduce<EditorJson | undefined>((node, segment) => {
+  return sourceId.split(".").reduce<JSONContent | undefined>((node, segment) => {
     const index = Number(segment);
     if (!Number.isInteger(index)) return undefined;
     return node?.content?.[index];

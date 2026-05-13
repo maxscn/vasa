@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -16,7 +16,7 @@ export type HighlightExtensionRenderers = {
 };
 
 export type HighlightExtensionOptions = {
-  renderers?: VasaExtensionRenderers<HighlightExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<HighlightExtensionRenderers>;
 };
 
 const defaultHighlightRenderers = {
@@ -27,7 +27,7 @@ const defaultHighlightRenderers = {
 
 export function createHighlightExtension(
   options: HighlightExtensionOptions = {},
-): VasaExtension<HighlightExtensionRenderers> {
+): SkrivaExtension<HighlightExtensionRenderers> {
   return {
     name: "highlight",
     tiptap: createHighlightMark(),

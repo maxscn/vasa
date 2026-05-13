@@ -1,12 +1,12 @@
-import type { EditorJson, EditorSelectionPoint } from "./index.ts";
+import type { JSONContent, EditorSelectionPoint } from "./model.ts";
 
 export type EditorTextPrimitiveResult = {
-  doc: EditorJson;
+  doc: JSONContent;
   point: EditorSelectionPoint;
 };
 
 export function insertAt(
-  doc: EditorJson,
+  doc: JSONContent,
   path: number[],
   word: string,
   from: number,
@@ -19,7 +19,7 @@ export function insertAt(
 }
 
 export function deleteLeft(
-  doc: EditorJson,
+  doc: JSONContent,
   path: number[],
   from: number,
   to = from - 1,
@@ -33,7 +33,7 @@ export function deleteLeft(
 }
 
 export function deleteRight(
-  doc: EditorJson,
+  doc: JSONContent,
   path: number[],
   from: number,
   to = from + 1,
@@ -47,7 +47,7 @@ export function deleteRight(
 }
 
 export function deleteRange(
-  doc: EditorJson,
+  doc: JSONContent,
   path: number[],
   from: number,
   to: number,
@@ -61,13 +61,13 @@ export function deleteRange(
 }
 
 function replaceTextRange(
-  doc: EditorJson,
+  doc: JSONContent,
   path: number[],
   from: number,
   to: number,
   value: string,
 ): EditorTextPrimitiveResult {
-  const nextDoc = cloneEditorJson(doc);
+  const nextDoc = cloneJsonContent(doc);
   const node = getNodeAtPath(nextDoc, path);
 
   if (node === undefined) {
@@ -85,14 +85,14 @@ function replaceTextRange(
   };
 }
 
-function getTextAtPath(doc: EditorJson, path: number[]): string {
+function getTextAtPath(doc: JSONContent, path: number[]): string {
   const node = getNodeAtPath(doc, path);
   if (node?.type === "text") return node.text ?? "";
   return "";
 }
 
-function getNodeAtPath(doc: EditorJson, path: number[]): EditorJson | undefined {
-  let current: EditorJson | undefined = doc;
+function getNodeAtPath(doc: JSONContent, path: number[]): JSONContent | undefined {
+  let current: JSONContent | undefined = doc;
 
   for (const index of path) {
     current = current?.content?.[index];
@@ -101,7 +101,7 @@ function getNodeAtPath(doc: EditorJson, path: number[]): EditorJson | undefined 
   return current;
 }
 
-function normalizeTextPath(doc: EditorJson, path: number[]): number[] {
+function normalizeTextPath(doc: JSONContent, path: number[]): number[] {
   const node = getNodeAtPath(doc, path);
   if (node?.type === "text") return path;
 
@@ -115,8 +115,8 @@ function normalizeTextPath(doc: EditorJson, path: number[]): number[] {
   return path;
 }
 
-function cloneEditorJson(doc: EditorJson): EditorJson {
-  return JSON.parse(JSON.stringify(doc)) as EditorJson;
+function cloneJsonContent(doc: JSONContent): JSONContent {
+  return JSON.parse(JSON.stringify(doc)) as JSONContent;
 }
 
 function clampOffset(offset: number, text: string) {

@@ -3,9 +3,9 @@ import {
   type FontDescriptor,
   type FontRegistry,
   type FontSource,
-  type VasaFont,
-} from "@vasa/font";
-import type { TextStyle } from "@vasa/layout";
+  type SkrivaFont,
+} from "@skriva/font";
+import type { TextStyle } from "@skriva/layout";
 
 export const editorCodeFontId = "courier-new";
 
@@ -33,7 +33,7 @@ export type EditorFontStyleOptions = {
 };
 
 export function createEditorTextStyleForFont(
-  font: Pick<VasaFont, "cssFamily" | "style" | "weight">,
+  font: Pick<SkrivaFont, "cssFamily" | "style" | "weight">,
   options: EditorFontStyleOptions,
 ): TextStyle {
   return {
@@ -53,7 +53,7 @@ export function createEditorTextStyleForFont(
   };
 }
 
-export function mergeFonts(seed: VasaFont[], next: VasaFont[]) {
+export function mergeFonts(seed: SkrivaFont[], next: SkrivaFont[]) {
   const byId = new Map(seed.map((font) => [font.id, font]));
   for (const font of next) byId.set(font.id, font);
   return [...byId.values()];
@@ -69,8 +69,8 @@ export function fontIdFromFamily(family: string) {
 
 export type RegisterEditorFontsOptions = {
   registry: FontRegistry;
-  bundledFont: VasaFont;
-  fallbackFont: VasaFont;
+  bundledFont: SkrivaFont;
+  fallbackFont: SkrivaFont;
   bundledFontSource?: FontSource;
   fallbackFontSource?: FontSource;
   fontFamilies?: Array<string | FontDescriptor>;

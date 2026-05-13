@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-table",
+  "name": "@skriva/extension-table",
   "version": "0.0.0",
-  "description": "Table node extension for Vasa.",
+  "description": "Table node extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,15 +22,15 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@tiptap/extension-table": "catalog:",
-    "@vasa/canvas": "workspace:*",
-    "@vasa/core": "workspace:*",
-    "@vasa/extension-document": "workspace:*",
-    "@vasa/extension-paragraph": "workspace:*",
-    "@vasa/extension-text": "workspace:*",
-    "@vasa/layout": "workspace:*",
-    "@vasa/pdf": "workspace:*",
-    "@vasa/renderer": "workspace:*"
+    "@skriva/canvas": "workspace:*",
+    "@skriva/core": "workspace:*",
+    "@skriva/extension-document": "workspace:*",
+    "@skriva/extension-paragraph": "workspace:*",
+    "@skriva/extension-text": "workspace:*",
+    "@skriva/layout": "workspace:*",
+    "@skriva/pdf": "workspace:*",
+    "@skriva/renderer": "workspace:*",
+    "@tiptap/extension-table": "catalog:"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

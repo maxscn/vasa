@@ -1,15 +1,16 @@
-import type { LayoutTextGrid, Rect } from "@vasa/layout";
+import type { LayoutTextGrid, Rect } from "@skriva/layout";
+import { isMarkActive, type EditorMarkSpec } from "./font-attributes.ts";
 import {
-  getTextAtPath,
-  isMarkActive,
+  getNodeAtPath,
   isSelectionExpanded,
-  moveSelection,
-  type EditorJson,
-  type EditorMarkSpec,
+  type JSONContent,
   type EditorSelection,
   type EditorSelectionPoint,
-  type EditorTextLine,
-} from "./index.ts";
+} from "./model.ts";
+import { getTextAtPath } from "./selection.ts";
+import { moveSelection } from "./transforms.ts";
+import { tablePositionForPath } from "./table-transforms.ts";
+import { type EditorTextLine } from "./actions.ts";
 import { isWordSeparator } from "./word.ts";
 
 export type EditorRenderLineDocument = {
@@ -98,7 +99,7 @@ export type EditorOverlayPaintOptions = {
   selectionColor?: string;
 };
 
-export function textToEditorDocument(value: string): EditorJson {
+export function textToEditorDocument(value: string): JSONContent {
   const paragraphs = value.split(/\n{2,}/g);
 
   return {
@@ -111,7 +112,7 @@ export function textToEditorDocument(value: string): EditorJson {
 }
 
 export function isToolbarMarkActive(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   storedMarks: EditorMarkSpec[],
   type: string,
@@ -145,8 +146,8 @@ export function upsertStoredMark(storedMarks: EditorMarkSpec[], mark: EditorMark
   ];
 }
 
-export function cloneEditorJson(doc: EditorJson): EditorJson {
-  return JSON.parse(JSON.stringify(doc)) as EditorJson;
+export function cloneJsonContent(doc: JSONContent): JSONContent {
+  return JSON.parse(JSON.stringify(doc)) as JSONContent;
 }
 
 export function cloneSelection(selection: EditorSelection): EditorSelection {
@@ -159,12 +160,12 @@ export function cloneSelection(selection: EditorSelection): EditorSelection {
   };
 }
 
-export function areEditorDocumentsEqual(left: EditorJson, right: EditorJson) {
+export function areEditorDocumentsEqual(left: JSONContent, right: JSONContent) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
 export function moveSelectionHorizontally(
-  doc: EditorJson,
+  doc: JSONContent,
   document: EditorRenderLineDocument,
   selection: EditorSelection,
   options: {
@@ -193,7 +194,12 @@ export function moveSelectionVertically(
   direction: "up" | "down",
   measureText: (text: string, font?: string) => number,
   options: EditorRenderLineOptions,
+  doc?: JSONContent,
 ): EditorSelectionPoint {
+  const tableMove =
+    doc === undefined ? undefined : moveSelectionVerticallyInTable(doc, selection, direction);
+  if (tableMove !== undefined) return tableMove;
+
   const lines = renderTextLines(document, options);
   const visualLines = renderVisualTextLines(document, options);
   const caret = findCaretRect(document, selection, measureText, options);
@@ -534,12 +540,12 @@ function removeEmptyAttrs(attrs: Record<string, unknown>) {
   );
 }
 
-function getEditorNodeAtPath(doc: EditorJson, path: number[]) {
-  return path.reduce<EditorJson | undefined>((node, index) => node?.content?.[index], doc);
+function getEditorNodeAtPath(doc: JSONContent, path: number[]) {
+  return path.reduce<JSONContent | undefined>((node, index) => node?.content?.[index], doc);
 }
 
 function moveSelectionByWord(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   direction: "left" | "right",
 ): EditorSelectionPoint {
@@ -563,6 +569,51 @@ function moveSelectionByWord(
   while (nextOffset < text.length && !isWordSeparator(text[nextOffset])) nextOffset += 1;
 
   return { path: selection.path, offset: nextOffset };
+}
+
+function moveSelectionVerticallyInTable(
+  doc: JSONContent,
+  selection: EditorSelection,
+  direction: "up" | "down",
+): EditorSelectionPoint | undefined {
+  const position = tablePositionForPath(doc, selection.path);
+  if (position === undefined) return undefined;
+
+  const table = getNodeAtPath(doc, position.tablePath);
+  const rows = table?.content ?? [];
+  const targetRowIndex = position.rowIndex + (direction === "up" ? -1 : 1);
+  const targetRow = rows[targetRowIndex];
+  const targetCellCount = targetRow?.content?.length ?? 0;
+  if (targetCellCount === 0) return selection;
+
+  const targetCellIndex = Math.min(position.cellIndex, targetCellCount - 1);
+  const targetCellPath = [...position.tablePath, targetRowIndex, targetCellIndex];
+  const targetCell = getNodeAtPath(doc, targetCellPath);
+  return editablePointInNodeAtOffset(targetCell, targetCellPath, selection.offset) ?? selection;
+}
+
+function editablePointInNodeAtOffset(
+  node: JSONContent | undefined,
+  path: number[],
+  offset: number,
+): EditorSelectionPoint | undefined {
+  if (node?.type === "text") {
+    const text = node.text ?? "";
+    return { path, offset: Math.max(0, Math.min(offset, text.length)) };
+  }
+
+  if (node?.type === "paragraph" || node?.type === "heading") {
+    const textIndex = node.content?.findIndex((child) => child.type === "text") ?? -1;
+    if (textIndex < 0) return { path: [...path, 0], offset: 0 };
+    return editablePointInNodeAtOffset(node.content?.[textIndex], [...path, textIndex], offset);
+  }
+
+  for (const [index, child] of (node?.content ?? []).entries()) {
+    const point = editablePointInNodeAtOffset(child, [...path, index], offset);
+    if (point !== undefined) return point;
+  }
+
+  return undefined;
 }
 
 type RenderedCaretStop = {

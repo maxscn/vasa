@@ -16,8 +16,24 @@ const config = defineConfig({
     tsconfigPaths: true,
     alias: [
       {
-        find: /^@vasa\/(.+)$/,
-        replacement: path.join(workspaceRoot, "packages/$1/src/index.ts"),
+        find: /^@opeinspection\/skriva\/headless$/,
+        replacement: path.join(workspaceRoot, "packages/editor/headless.ts"),
+      },
+      {
+        find: /^@opeinspection\/skriva\/react$/,
+        replacement: path.join(workspaceRoot, "packages/editor/react.ts"),
+      },
+      {
+        find: /^@opeinspection\/skriva\/enrichments\/(.+)$/,
+        replacement: path.join(workspaceRoot, "packages/editor/enrichments/$1.ts"),
+      },
+      {
+        find: /^@opeinspection\/skriva\/(.+)$/,
+        replacement: path.join(workspaceRoot, "packages/editor/$1.ts"),
+      },
+      {
+        find: /^@opeinspection\/skriva$/,
+        replacement: path.join(workspaceRoot, "packages/editor/src/index.ts"),
       },
     ],
   },

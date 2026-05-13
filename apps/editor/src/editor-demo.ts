@@ -1,9 +1,13 @@
-import { HorizontalRule } from "@vasa/extension-horizontal-rule";
-import { createSvgNode, SvgExtension } from "@vasa/extension-svg";
-import { TableExtension } from "@vasa/extension-table";
-import type { EditorConfig } from "@vasa/editor";
-import { arimoFallbackFont, arimoRegularFont } from "@vasa/font";
-import { localArimoRegularFontSource, localGoogleFontDescriptors } from "./editor-font-assets";
+import { HorizontalRule } from "@opeinspection/skriva/enrichments/horizontal-rule";
+import { createSvgNode, SvgExtension } from "@opeinspection/skriva/enrichments/svg";
+import { TableExtension } from "@opeinspection/skriva/enrichments/table";
+import type { SkrivaEditorConfig } from "@opeinspection/skriva";
+import { arimoFallbackFont, arimoRegularFont } from "@opeinspection/skriva/font";
+import {
+  localArimoRegularFontSource,
+  localControlledGoogleFontFamilies,
+  localGoogleFontDescriptors,
+} from "./editor-font-assets";
 
 export const page = {
   width: 612,
@@ -12,7 +16,11 @@ export const page = {
 };
 
 export const canvasPageGap = 40;
-export const documentExtensions = [HorizontalRule, SvgExtension, TableExtension];
+export const documentExtensions: NonNullable<SkrivaEditorConfig["extensions"]> = [
+  HorizontalRule,
+  SvgExtension,
+  TableExtension,
+];
 export const demoSvgNode = createSvgNode({
   id: "demo-svg",
   width: 180,
@@ -64,10 +72,11 @@ export const editorConfig = {
   extensions: documentExtensions,
   extraChildren: [],
   fontFamilies: googleFontFamilies,
+  controlledFontFamilies: localControlledGoogleFontFamilies,
   fontSizeOptions,
   initialColor: "#2563eb",
   canvasTextMode: "outline",
   canvasBitmapScale: 1.5,
   pageBackground: "#fffdfa",
   textColor: "#1f2937",
-} satisfies EditorConfig;
+} satisfies SkrivaEditorConfig;

@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-paragraph",
+  "name": "@skriva/extension-paragraph",
   "version": "0.0.0",
-  "description": "Paragraph node extension for Vasa.",
+  "description": "Paragraph node extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,7 +22,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/core": "workspace:*"
+    "@skriva/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

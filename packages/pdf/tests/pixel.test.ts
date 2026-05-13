@@ -3,7 +3,12 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildCanvasScene, type CanvasNode, type CanvasTextLineNode } from "@vasa/canvas";
+import {
+  Scene,
+  type CanvasNode,
+  type CanvasRendererExtension,
+  type CanvasTextLineNode,
+} from "@opeinspection/skriva/canvas";
 import {
   createEditorCanvasTextMeasurer,
   createEditorCanvasTextPaint,
@@ -16,15 +21,17 @@ import {
   createEditorRenderTextStyle,
   createEditorTextStyleForFont,
   type EditorRenderDocumentContract,
-  type EditorJson,
-} from "@vasa/editor";
+  type JSONContent,
+} from "@opeinspection/skriva";
+import type { SkrivaExtension } from "@opeinspection/skriva/enrichment";
+import type { PdfRendererExtension } from "@opeinspection/skriva/pdf";
 import { editorConfig } from "../../../apps/editor/src/editor-demo.ts";
 import {
   createFontRegistry,
   createFontScriptStyle,
   createFontStrikeoutStyle,
   createStandardFontMetrics,
-  type VasaFont,
+  type SkrivaFont,
 } from "../../font/src/index.ts";
 import {
   createMonospaceTextMeasurer,
@@ -33,14 +40,13 @@ import {
   type LayoutResult,
   type Rect,
   type TextLine,
-} from "@vasa/layout";
+} from "@opeinspection/skriva/layout";
 import {
   comparePdfAndCanvasRenderers,
   createNativeMeasureText,
   createFontTextMeasurer,
   extractPdfText,
   imageDiff,
-  imageDiffMessage,
   imageDiffSummary,
   imageHash,
   registerRenderTestFont,
@@ -53,9 +59,9 @@ import {
   textOutlinePathBounds,
   type RenderDocument,
   type RenderTextNode,
-} from "@vasa/renderer";
+} from "@opeinspection/skriva/renderer";
 import { expect, test } from "vite-plus/test";
-import { renderDocumentToPdf, type PdfCommand } from "../src/index.ts";
+import { renderDocumentToPdf, writePdf, type PdfCommand } from "../src/index.ts";
 import { webEditorConfig } from "../../../apps/web/src/editor-config.ts";
 
 const page = { width: 48, height: 24, margin: 4 };
@@ -69,12 +75,24 @@ const outlineFont = parseTextOutlineFont(
 const liberationSansBytes = readFileSync(
   join(fixtureDir, "fixtures/fonts/LiberationSans-Regular.ttf"),
 );
-registerRenderTestFont(liberationSansBytes, "Vasa Liberation Sans");
+registerRenderTestFont(liberationSansBytes, "Skriva Liberation Sans");
 const arimoBytes = readFileSync(join(fixtureDir, "fixtures/fonts/google/arimo/Arimo-Regular.ttf"));
 const appEditorOutlineFont = parseTextOutlineFont(arimoBytes, { variations: { wght: 400 } });
 registerRenderTestFont(arimoBytes, "Arimo");
 const arimoBoldBytes = readFileSync(join(fixtureDir, "fixtures/fonts/google/arimo/Arimo-700.ttf"));
 const appEditorBoldOutlineFont = parseTextOutlineFont(arimoBoldBytes, {
+  variations: { wght: 700 },
+});
+const arimoItalicBytes = readFileSync(
+  join(fixtureDir, "fixtures/fonts/google/arimo/Arimo-400-italic.ttf"),
+);
+const appEditorItalicOutlineFont = parseTextOutlineFont(arimoItalicBytes, {
+  variations: { wght: 400 },
+});
+const arimoBoldItalicBytes = readFileSync(
+  join(fixtureDir, "fixtures/fonts/google/arimo/Arimo-700-italic.ttf"),
+);
+const appEditorBoldItalicOutlineFont = parseTextOutlineFont(arimoBoldItalicBytes, {
   variations: { wght: 700 },
 });
 const geistBytes = readFileSync(join(fixtureDir, "fixtures/fonts/google/geist/Geist-Regular.ttf"));
@@ -150,7 +168,7 @@ test("renders text primitive outlines to exact matching PDF and canvas image has
       {
         type: "text",
         id: "text-fixture",
-        text: "Vasa 42",
+        text: "Skriva 42",
         style: { lineHeight: 18 },
       },
     ],
@@ -194,8 +212,8 @@ test("matches editor canvas and PDF font scale for the current rich-text profile
           {
             type: "text",
             id: "0.0",
-            text: "Vasa editor demo",
-            style: { font: "400 16px/16px Vasa Liberation Sans", lineHeight: 16 },
+            text: "Skriva editor demo",
+            style: { font: "400 16px/16px Skriva Liberation Sans", lineHeight: 16 },
           },
         ],
       },
@@ -207,7 +225,7 @@ test("matches editor canvas and PDF font scale for the current rich-text profile
             type: "text",
             id: "1.0",
             text: "Type here to update the document model, layout tree, canvas renderer, and PDF output.",
-            style: { font: "400 16px/16px Vasa Liberation Sans", lineHeight: 16 },
+            style: { font: "400 16px/16px Skriva Liberation Sans", lineHeight: 16 },
           },
         ],
       },
@@ -247,7 +265,7 @@ test("keeps rich canvas editor and rasterized PDF output visually aligned within
       {
         type: "text",
         id: "title",
-        text: "Vasa editor demo",
+        text: "Skriva editor demo",
         style: { font: "700 18px Liberation Sans", lineHeight: 22 },
       },
       {
@@ -300,13 +318,13 @@ test("keeps bold and 28px editor text visually aligned between canvas and PDF", 
     style: "normal",
     weight: "400",
   };
-  const document: EditorJson = {
+  const document: JSONContent = {
     type: "doc",
     content: [
       {
         type: "paragraph",
         content: [
-          { type: "text", text: "Vasa " },
+          { type: "text", text: "Skriva " },
           {
             type: "text",
             text: "editor",
@@ -380,7 +398,7 @@ test("keeps DOM-style Tiptap marks aligned between canvas and PDF", async () => 
     style: "normal",
     weight: "400",
   };
-  const document: EditorJson = {
+  const document: JSONContent = {
     type: "doc",
     content: [
       {
@@ -479,7 +497,7 @@ test("keeps DOM-style Tiptap marks aligned between canvas and PDF", async () => 
 
 test("renders mixed editor marks identically between canvas and PDF", async () => {
   const mixedPage = { width: 520, height: 96, margin: 10 };
-  const doc: EditorJson = {
+  const doc: JSONContent = {
     type: "doc",
     content: [
       {
@@ -519,7 +537,7 @@ test("renders mixed editor marks identically between canvas and PDF", async () =
   expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
-test("renders WebGL text parity cases identically between canvas and PDF", async () => {
+test("renders outline text parity cases identically between canvas and PDF", async () => {
   const comparison = await compareMarkedEditorDoc(
     {
       type: "doc",
@@ -562,7 +580,7 @@ test("renders the apps/editor rich-text page contract identically between canvas
     pdfBytes: pdf.bytes,
     document: contract.renderDocument,
     artifacts:
-      process.env.VASA_RENDER_TEST_ARTIFACTS === undefined
+      process.env.SKRIVA_RENDER_TEST_ARTIFACTS === undefined
         ? {
             dir: join(fixtureDir, "artifacts/app-editor-parity"),
             title: "app-editor-parity",
@@ -591,6 +609,24 @@ test("apps/editor keeps visible space before Geist bold italic combined marks", 
 
   expect(gap.measuredGap).toBeLessThan(1);
   expect(gap.inkGap).toBeGreaterThanOrEqual(6);
+});
+
+test("apps/editor resolves real bold italic font faces without synthetic paint", () => {
+  const contract = createAppEditorFixtureContract(createEditorParityDocument());
+  const boldItalicLine = collectTextLines(contract.layout.pages[0]?.boxes ?? []).find(
+    (line) => line.text === "bold italic",
+  );
+
+  expect(boldItalicLine).toBeDefined();
+  const canvasPaint = contract.canvasTextPaint({ lines: [boldItalicLine!] }, 0);
+  const pdfPaint = contract.pdfOutlineText({ lines: [boldItalicLine!] }, 0);
+
+  expect(canvasPaint.outlineFont).toBe(appEditorBoldItalicOutlineFont);
+  expect(canvasPaint.embolden).toBeUndefined();
+  expect(canvasPaint.skewX).toBeUndefined();
+  expect(pdfPaint?.font).toBe(appEditorBoldItalicOutlineFont);
+  expect(pdfPaint?.embolden).toBeUndefined();
+  expect(pdfPaint?.skewX).toBeUndefined();
 });
 
 test("apps/web keeps visible space before Geist bold italic combined marks", () => {
@@ -627,7 +663,7 @@ test("apps/editor selectable outline PDF exposes text through pdf.js text extrac
   const extractedText = normalizeExtractedPdfText(await extractPdfText(pdf.bytes));
 
   expect(extractedText).toContain(
-    "Vasa editor parity sheet Combined marks should stay glued together",
+    "Skriva editor parity sheet Combined marks should stay glued together",
   );
   expect(extractedText).toContain(
     "Highlight, color, and code: yellow note, blue text, and inline code.",
@@ -649,7 +685,7 @@ test("apps/editor selectable outline PDF visually matches canvas through pdf.js"
     pdfBytes: pdf.bytes,
     document: contract.renderDocument,
     artifacts:
-      process.env.VASA_RENDER_TEST_ARTIFACTS === undefined
+      process.env.SKRIVA_RENDER_TEST_ARTIFACTS === undefined
         ? {
             dir: join(fixtureDir, "artifacts/app-editor-native-text-parity"),
             title: "app-editor-native-text-parity",
@@ -686,7 +722,7 @@ test("apps/editor native PDF keeps selectable text exports compact", async () =>
 
   expect(pdf.bytes.byteLength).toBeLessThan(16_000);
   expect(extractedText).toContain(
-    "Vasa editor parity sheet Combined marks should stay glued together",
+    "Skriva editor parity sheet Combined marks should stay glued together",
   );
   expect(extractedText).toContain(
     "Highlight, color, and code: yellow note, blue text, and inline code.",
@@ -709,7 +745,7 @@ test("apps/editor selectable outline PDF compresses below raw outline size", asy
   expect(compressedBytes.byteLength).toBeLessThan(pdf.bytes.byteLength * 0.45);
   expect(compressedBytes.byteLength).toBeLessThan(256_000);
   expect(normalizeExtractedPdfText(await extractPdfText(compressedBytes))).toContain(
-    "Vasa editor parity sheet Combined marks should stay glued together",
+    "Skriva editor parity sheet Combined marks should stay glued together",
   );
 });
 
@@ -724,12 +760,70 @@ test("apps/editor embedded PDF subsets font glyphs for compact selectable text",
     defaultTextFill: editorConfig.textColor,
     textMode: "embedded",
   });
+  const compressedBytes = await pdf.compressedBytes();
   const extractedText = normalizeExtractedPdfText(await extractPdfText(pdf.bytes));
 
   expect(pdf.bytes.byteLength).toBeLessThan(80_000);
+  expect(compressedBytes.byteLength).toBeLessThan(24_000);
   expect(extractedText).toContain(
-    "Vasa editor parity sheet Combined marks should stay glued together",
+    "Skriva editor parity sheet Combined marks should stay glued together",
   );
+});
+
+test("embedded PDF keeps equal-size font faces distinct", () => {
+  expect(arimoBytes.byteLength).toBe(arimoBoldBytes.byteLength);
+  expect(arimoItalicBytes.byteLength).toBe(arimoBoldItalicBytes.byteLength);
+
+  const bytes = writePdf(
+    [
+      { type: "beginPage", index: 0, rect: { x: 0, y: 0, width: 300, height: 100 } },
+      {
+        type: "text",
+        text: "regular",
+        x: 10,
+        y: 10,
+        fontSize: 16,
+        embeddedFont: { font: appEditorOutlineFont },
+      },
+      {
+        type: "text",
+        text: "bold",
+        x: 10,
+        y: 32,
+        fontSize: 16,
+        fontWeight: "700",
+        embeddedFont: { font: appEditorBoldOutlineFont },
+      },
+      {
+        type: "text",
+        text: "italic",
+        x: 100,
+        y: 10,
+        fontSize: 16,
+        fontStyle: "italic",
+        embeddedFont: { font: appEditorItalicOutlineFont },
+      },
+      {
+        type: "text",
+        text: "bold italic",
+        x: 100,
+        y: 32,
+        fontSize: 16,
+        fontWeight: "700",
+        fontStyle: "italic",
+        embeddedFont: { font: appEditorBoldItalicOutlineFont },
+      },
+    ],
+    { width: 300, height: 100, margin: 10 },
+  );
+  const pdf = new TextDecoder().decode(bytes);
+  const fontStreams = embeddedTrueTypeStreams(bytes);
+
+  expect(pdf.match(/\/FontFile2/g)).toHaveLength(4);
+  expect(pdf).toContain("/EF1");
+  expect(pdf).toContain("/EF4");
+  expect(fontStreams).toHaveLength(4);
+  expect(new Set(fontStreams.map((stream) => Buffer.from(stream).toString("base64"))).size).toBe(4);
 });
 
 test("embedded PDF size grows sublinearly for repeated characters", async () => {
@@ -739,7 +833,7 @@ test("embedded PDF size grows sublinearly for repeated characters", async () => 
       {
         type: "text",
         text: "a".repeat(1500),
-        style: { font: "400 16px Vasa Liberation Sans", lineHeight: 16 },
+        style: { font: "400 16px Skriva Liberation Sans", lineHeight: 16 },
       },
     ],
   };
@@ -757,11 +851,7 @@ test("embedded PDF size grows sublinearly for repeated characters", async () => 
 
 test("uses the apps/editor fixture to keep script marks visibly small and offset", () => {
   const contract = createAppEditorFixtureContract(createEditorParityDocument());
-  const layout = renderDocumentToPdf(contract.layoutTree, {
-    page: appEditorFixturePage,
-    measurer: appEditorFixtureMeasurer,
-    outlineText: contract.pdfOutlineText,
-  }).layout;
+  const layout = renderAppEditorFixturePdf(contract).layout;
   const lines = collectTextLines(layout.pages[0]?.boxes ?? []);
   const hydrogen = lines.find((line) => line.text.endsWith("H"));
   const subscript = lines.find((line) => line.text === "2" && line.verticalAlign === "sub");
@@ -801,11 +891,7 @@ test("uses the apps/editor fixture to keep script marks visibly small and offset
 
 test("sizes apps/editor decorations and code backgrounds to the rendered glyph outlines", () => {
   const contract = createAppEditorFixtureContract(createEditorParityDocument());
-  const pdf = renderDocumentToPdf(contract.layoutTree, {
-    page: appEditorFixturePage,
-    measurer: appEditorFixtureMeasurer,
-    outlineText: contract.pdfOutlineText,
-  });
+  const pdf = renderAppEditorFixturePdf(contract);
   const lines = collectTextLines(pdf.layout.pages[0]?.boxes ?? []);
   const underlined = lineByText(lines, "underlined");
   const struck = lineByText(lines, "struck text");
@@ -829,11 +915,7 @@ test("sizes apps/editor decorations and code backgrounds to the rendered glyph o
 
 test("places apps/editor PDF underline and strike decorations at DOM-like vertical offsets", () => {
   const contract = createAppEditorFixtureContract(createEditorParityDocument());
-  const pdf = renderDocumentToPdf(contract.layoutTree, {
-    page: appEditorFixturePage,
-    measurer: appEditorFixtureMeasurer,
-    outlineText: contract.pdfOutlineText,
-  });
+  const pdf = renderAppEditorFixturePdf(contract);
   const lines = collectTextLines(pdf.layout.pages[0]?.boxes ?? []);
   const underlined = lineByText(lines, "underlined");
   const struck = lineByText(lines, "struck text");
@@ -919,11 +1001,7 @@ test.each(decorationFontFixtures)(
 test("matches cropped apps/editor script glyph shapes between canvas and PDF", async () => {
   const scale = 2;
   const contract = createAppEditorFixtureContract(createEditorParityDocument());
-  const pdf = renderDocumentToPdf(contract.layoutTree, {
-    page: appEditorFixturePage,
-    measurer: appEditorFixtureMeasurer,
-    outlineText: contract.pdfOutlineText,
-  });
+  const pdf = renderAppEditorFixturePdf(contract);
   const comparison = await comparePdfAndCanvasRenderers({
     pdfBytes: pdf.bytes,
     document: contract.renderDocument,
@@ -978,9 +1056,7 @@ test("renders highlighted layout text identically inside a mixed editor line", a
     { width: 420, height: 64, margin: 10 },
   );
 
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("keeps superscript canvas text aligned with its neighboring editor runs", async () => {
@@ -1001,9 +1077,7 @@ test("keeps superscript canvas text aligned with its neighboring editor runs", a
     { width: 520, height: 64, margin: 10 },
   );
 
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("keeps renderer text aligned after a superscript editor run", async () => {
@@ -1024,9 +1098,7 @@ test("keeps renderer text aligned after a superscript editor run", async () => {
     { width: 520, height: 64, margin: 10 },
   );
 
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("renders struck PDF output text identically inside a mixed editor line", async () => {
@@ -1046,9 +1118,7 @@ test("renders struck PDF output text identically inside a mixed editor line", as
     { width: 190, height: 64, margin: 10 },
   );
 
-  expect(imageHash(comparison.canvas), imageDiffMessage(comparison.canvas, comparison.pdf)).toBe(
-    imageHash(comparison.pdf),
-  );
+  expectNearPixelImageDiff(comparison.canvas, comparison.pdf);
 });
 
 test("raises superscript using the editor app render profile baseline", () => {
@@ -1141,18 +1211,18 @@ for (const fixture of [
   prefix?: string;
   text?: string;
   suffix?: string;
-  marks: EditorJson["marks"];
+  marks: JSONContent["marks"];
 }>) {
   test(`keeps ${fixture.name} editor mark visually aligned between canvas and PDF`, async () => {
     const markPage = { width: 160, height: 64, margin: 10 };
-    const doc: EditorJson = {
+    const doc: JSONContent = {
       type: "doc",
       content: [
         {
           type: "paragraph",
           content: [
             ...(fixture.prefix === undefined ? [] : [{ type: "text", text: fixture.prefix }]),
-            { type: "text", text: fixture.text ?? "Vasa", marks: fixture.marks },
+            { type: "text", text: fixture.text ?? "Skriva", marks: fixture.marks },
             ...(fixture.suffix === undefined ? [] : [{ type: "text", text: fixture.suffix }]),
           ],
         },
@@ -1194,7 +1264,7 @@ function fontSizeFromBox(id: string | undefined) {
 }
 
 async function compareMarkedEditorDoc(
-  document: EditorJson,
+  document: JSONContent,
   page: { width: number; height: number; margin: number },
 ) {
   const layoutTree = createMarkedFixtureLayoutTree(document);
@@ -1227,7 +1297,12 @@ function createMarkedFixtureAppLayout(document: BoxNode) {
 
 const appEditorFixturePage = editorConfig.page;
 const appEditorFixtureExtraChildren = editorConfig.extraChildren ?? [];
-const appEditorFixtureExtensions = editorConfig.extensions ?? [];
+const appEditorFixtureExtensions: Array<
+  SkrivaExtension<{
+    canvas: CanvasRendererExtension;
+    pdf: PdfRendererExtension;
+  }>
+> = editorConfig.extensions ?? [];
 const appEditorFixtureLayoutExtensions = appEditorFixtureExtensions.flatMap((extension) =>
   asArray(extension.layout),
 );
@@ -1246,7 +1321,7 @@ const appEditorFixtureMeasurer = createEditorRenderTextMeasurer(
   createNativeMeasureText("normal 400 16px Arimo, Arial, sans-serif"),
 );
 
-function createAppEditorFixtureContract(document: EditorJson) {
+function createAppEditorFixtureContract(document: JSONContent) {
   return createEditorRenderDocument({
     doc: document,
     page: appEditorFixturePage,
@@ -1258,6 +1333,15 @@ function createAppEditorFixtureContract(document: EditorJson) {
     layoutExtensions: appEditorFixtureLayoutExtensions,
     rendererExtensions: appEditorFixtureRendererExtensions,
     createRenderDocument,
+  });
+}
+
+function renderAppEditorFixturePdf(contract: ReturnType<typeof createAppEditorFixtureContract>) {
+  return renderDocumentToPdf(contract.layoutTree, {
+    page: appEditorFixturePage,
+    measurer: appEditorFixtureMeasurer,
+    outlineText: contract.pdfOutlineText,
+    renderers: appEditorFixturePdfRenderers,
   });
 }
 
@@ -1273,7 +1357,7 @@ async function createDecorationFixtureFont(family: string, file: string) {
   });
 
   expect(font.outlineFont, `${family} outline font`).toBeDefined();
-  return font as VasaFont & { outlineFont: NonNullable<VasaFont["outlineFont"]> };
+  return font as SkrivaFont & { outlineFont: NonNullable<SkrivaFont["outlineFont"]> };
 }
 
 function discoverDecorationFontFixtures() {
@@ -1306,10 +1390,10 @@ function regularFontFixtureFiles(root: string, dir = root): string[] {
 }
 
 function createFontDecorationContract(
-  font: VasaFont & { outlineFont: NonNullable<VasaFont["outlineFont"]> },
+  font: SkrivaFont & { outlineFont: NonNullable<SkrivaFont["outlineFont"]> },
   fixture: { text: string; mark: "strike" | "underline" },
 ) {
-  const document: EditorJson = {
+  const document: JSONContent = {
     type: "doc",
     content: [
       {
@@ -1345,16 +1429,16 @@ function createFontDecorationContract(
   return { contract, pdf };
 }
 
-function expectedFontStrikeoutOffset(font: VasaFont, line: TextLine) {
+function expectedFontStrikeoutOffset(font: SkrivaFont, line: TextLine) {
   const fontSize = line.fontSize ?? editorConfig.textFontSize;
   return createFontStrikeoutStyle(font, { fontSize }).offset;
 }
 
-function expectedFontStrikeoutTop(font: VasaFont, line: TextLine) {
+function expectedFontStrikeoutTop(font: SkrivaFont, line: TextLine) {
   return Math.round(line.y + expectedFontStrikeoutOffset(font, line));
 }
 
-function expectedFontUnderlineOffset(font: VasaFont, line: TextLine) {
+function expectedFontUnderlineOffset(font: SkrivaFont, line: TextLine) {
   const metrics = font.data.metrics;
   expect(metrics, `${font.family} metrics`).toBeDefined();
   const unitsPerEm = metrics!.unitsPerEm;
@@ -1365,12 +1449,49 @@ function expectedFontUnderlineOffset(font: VasaFont, line: TextLine) {
   return ascender * fontSize - position * fontSize;
 }
 
-function expectedFontUnderlineTop(font: VasaFont, line: TextLine) {
+function expectedFontUnderlineTop(font: SkrivaFont, line: TextLine) {
   return Math.round(line.y + expectedFontUnderlineOffset(font, line));
 }
 
 function normalizeExtractedPdfText(pages: string[]) {
   return pages.join(" ").replaceAll(/\s+/g, " ").trim();
+}
+
+function embeddedTrueTypeStreams(pdf: Uint8Array) {
+  const marker = new TextEncoder().encode("stream\n");
+  const endMarker = new TextEncoder().encode("\nendstream");
+  const streams: Uint8Array[] = [];
+  let offset = 0;
+
+  while (offset < pdf.length) {
+    const start = indexOfBytes(pdf, marker, offset);
+    if (start < 0) break;
+
+    const contentStart = start + marker.length;
+    const end = indexOfBytes(pdf, endMarker, contentStart);
+    if (end < 0) break;
+
+    const stream = pdf.slice(contentStart, end);
+    if (isTrueTypeStream(stream)) streams.push(stream);
+    offset = end + endMarker.length;
+  }
+
+  return streams;
+}
+
+function isTrueTypeStream(stream: Uint8Array) {
+  return (
+    (stream[0] === 0x00 && stream[1] === 0x01 && stream[2] === 0x00 && stream[3] === 0x00) ||
+    new TextDecoder().decode(stream.slice(0, 4)) === "OTTO"
+  );
+}
+
+function indexOfBytes(haystack: Uint8Array, needle: Uint8Array, offset: number) {
+  for (let index = offset; index <= haystack.length - needle.length; index += 1) {
+    if (needle.every((byte, needleIndex) => haystack[index + needleIndex] === byte)) return index;
+  }
+
+  return -1;
 }
 
 function asArray<T>(value: T | T[] | undefined): T[] {
@@ -1615,9 +1736,42 @@ function appEditorFixtureRenderProfile() {
       outlineFont: appEditorBoldOutlineFont,
     },
   };
+  const italicFont = {
+    ...font,
+    id: "arimo-400-italic",
+    style: "italic",
+    outlineFont: appEditorItalicOutlineFont,
+    data: {
+      kind: "outline" as const,
+      bytes: arimoItalicBytes,
+      metrics: {
+        ...createStandardFontMetrics({ family: "Arimo" }),
+        unitsPerEm: appEditorItalicOutlineFont.unitsPerEm,
+        ascender: appEditorItalicOutlineFont.ascender,
+      },
+      outlineFont: appEditorItalicOutlineFont,
+    },
+  };
+  const boldItalicFont = {
+    ...font,
+    id: "arimo-700-italic",
+    weight: "700",
+    style: "italic",
+    outlineFont: appEditorBoldItalicOutlineFont,
+    data: {
+      kind: "outline" as const,
+      bytes: arimoBoldItalicBytes,
+      metrics: {
+        ...createStandardFontMetrics({ family: "Arimo" }),
+        unitsPerEm: appEditorBoldItalicOutlineFont.unitsPerEm,
+        ascender: appEditorBoldItalicOutlineFont.ascender,
+      },
+      outlineFont: appEditorBoldItalicOutlineFont,
+    },
+  };
 
   return {
-    fonts: [font, boldFont],
+    fonts: [font, boldFont, italicFont, boldItalicFont],
     defaultFontId: font.id,
     fallbackFont: editorConfig.fallbackFont,
     fontSize: editorConfig.textFontSize,
@@ -1638,7 +1792,7 @@ function expectCombinedMarksBoldItalicGap(profile: ReturnType<typeof geistFixtur
     paragraphStyle: { flexDirection: "column" },
     createRenderDocument,
   });
-  const scene = buildCanvasScene(contract.renderDocument, {
+  const scene = Scene(contract.renderDocument, {
     pageBackground: "#fffdfa",
     text: contract.canvasTextPaint,
   });
@@ -1719,7 +1873,7 @@ function webGeistFixtureRenderProfile() {
   };
 }
 
-function createMarkedFixtureLayoutTree(document: EditorJson) {
+function createMarkedFixtureLayoutTree(document: JSONContent) {
   markedFixtureDoc = document;
 
   return createEditorLayoutTree(document, {
@@ -1747,7 +1901,7 @@ function markedFixtureCanvasText(box: LayoutBox, lineIndex: number) {
   );
 }
 
-let markedFixtureDoc: EditorJson = { type: "doc" };
+let markedFixtureDoc: JSONContent = { type: "doc" };
 
 function markedFixtureRenderProfile() {
   const font = {

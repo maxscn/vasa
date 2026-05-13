@@ -1,4 +1,4 @@
-import { collectExtensionRenderers } from "@vasa/core";
+import { collectExtensionRenderers } from "@skriva/core";
 import { expect, test } from "vite-plus/test";
 import { createBoldExtension } from "../src/index.ts";
 

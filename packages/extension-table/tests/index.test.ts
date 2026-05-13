@@ -1,11 +1,21 @@
-import { buildCanvasScene, createCanvasCommands } from "@vasa/canvas";
-import { getSchema } from "@vasa/core";
-import { Document } from "@vasa/extension-document";
-import { Paragraph } from "@vasa/extension-paragraph";
-import { Text } from "@vasa/extension-text";
-import { layoutDocument, type BoxNode, type LayoutOptions, type TextMeasurer } from "@vasa/layout";
-import { createPdfCommands } from "@vasa/pdf";
-import { createRenderDocument } from "@vasa/renderer";
+import {
+  Scene,
+  createCanvasCommands,
+  type CanvasCommand,
+  type CanvasSurface,
+} from "@skriva/canvas";
+import { getSchema } from "@skriva/core";
+import { Document } from "@skriva/extension-document";
+import { Paragraph } from "@skriva/extension-paragraph";
+import { Text } from "@skriva/extension-text";
+import {
+  layoutDocument,
+  type BoxNode,
+  type LayoutOptions,
+  type TextMeasurer,
+} from "@skriva/layout";
+import { createPdfCommands } from "@skriva/pdf";
+import { createRenderDocument } from "@skriva/renderer";
 import { expect, test } from "vite-plus/test";
 import { createTableNode, TableExtension } from "../src/index.ts";
 
@@ -26,7 +36,7 @@ const measurer: TextMeasurer = {
   },
 };
 
-test("installs the Tiptap table kit next to Vasa document primitives", () => {
+test("installs the Tiptap table kit next to Skriva document primitives", () => {
   const schema = getSchema(
     [Document.tiptap, Paragraph.tiptap, Text.tiptap, TableExtension.tiptap].filter(
       (extension) => extension !== undefined,
@@ -92,7 +102,7 @@ test("maps table borders and text to matching PDF and canvas geometry", () => {
     extensions: rendererExtensions(),
   });
   const canvasCommands = createCanvasCommands(
-    buildCanvasScene(renderDocument, { extensions: canvasRenderers() }),
+    Scene(renderDocument, { extensions: canvasRenderers() }),
   );
   const pdfCommands = createPdfCommands(renderDocument, page, { renderers: pdfRenderers() });
 
@@ -175,9 +185,7 @@ function pdfRenderers() {
 }
 
 function canvasTextSummary(commands: ReturnType<typeof createCanvasCommands>) {
-  return commands
-    .filter((command) => command.type === "fillText")
-    .map((command) => [command.text, command.x, command.y]);
+  return canvasOperations(commands).text.map((command) => [command.text, command.x, command.y]);
 }
 
 function pdfTextSummary(commands: ReturnType<typeof createPdfCommands>) {
@@ -187,11 +195,7 @@ function pdfTextSummary(commands: ReturnType<typeof createPdfCommands>) {
 }
 
 function canvasBorderSummary(commands: ReturnType<typeof createCanvasCommands>) {
-  return commands.filter(isCanvasPathCommandWithStroke).map((command) => ({
-    ...rectFromPath(command.path),
-    stroke: command.stroke,
-    strokeWidth: command.strokeWidth,
-  }));
+  return canvasOperations(commands).paths;
 }
 
 function pdfBorderSummary(commands: ReturnType<typeof createPdfCommands>) {
@@ -200,14 +204,6 @@ function pdfBorderSummary(commands: ReturnType<typeof createPdfCommands>) {
     stroke: command.stroke,
     strokeWidth: command.strokeWidth,
   }));
-}
-
-function isCanvasPathCommandWithStroke(
-  command: ReturnType<typeof createCanvasCommands>[number],
-): command is Extract<ReturnType<typeof createCanvasCommands>[number], { type: "path" }> & {
-  stroke: string;
-} {
-  return command.type === "path" && command.stroke !== undefined;
 }
 
 function isPdfPathCommandWithStroke(
@@ -239,6 +235,59 @@ function rectFromPath(path: { commands: Array<{ type: string; x?: number; y?: nu
   const x = Math.min(...xs);
   const y = Math.min(...ys);
   return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+}
+
+function canvasOperations(commands: CanvasCommand[]) {
+  const text: Array<{ text: string; x: number; y: number }> = [];
+  const paths: Array<{
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    stroke: string | undefined;
+    strokeWidth: number | undefined;
+  }> = [];
+  let pathPoints: Array<{ x: number; y: number }> = [];
+  const surface: CanvasSurface = {
+    clearRect() {},
+    fillRect() {},
+    strokeRect() {},
+    fillText(value, x, y) {
+      text.push({ text: value, x, y });
+    },
+    beginPath() {
+      pathPoints = [];
+    },
+    moveTo(x, y) {
+      pathPoints.push({ x, y });
+    },
+    lineTo(x, y) {
+      pathPoints.push({ x, y });
+    },
+    bezierCurveTo(_x1, _y1, _x2, _y2, x, y) {
+      pathPoints.push({ x, y });
+    },
+    closePath() {},
+    fill() {},
+    stroke() {
+      if (pathPoints.length === 0) return;
+      const xs = pathPoints.map((point) => point.x);
+      const ys = pathPoints.map((point) => point.y);
+      const x = Math.min(...xs);
+      const y = Math.min(...ys);
+      paths.push({
+        x,
+        y,
+        width: Math.max(...xs) - x,
+        height: Math.max(...ys) - y,
+        stroke: surface.strokeStyle,
+        strokeWidth: surface.lineWidth,
+      });
+    },
+  };
+
+  for (const command of commands) command.apply(surface);
+  return { paths, text };
 }
 
 function asArray<T>(value: T | T[] | undefined): T[] {

@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 export type TextStyleAttributes = {
   fontId?: string;
@@ -33,7 +33,7 @@ export type TextStyleExtensionRenderers = {
 };
 
 export type TextStyleExtensionOptions = {
-  renderers?: VasaExtensionRenderers<TextStyleExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<TextStyleExtensionRenderers>;
 };
 
 const defaultTextStyleRenderers = {
@@ -64,7 +64,7 @@ const defaultTextStyleRenderers = {
 
 export function createTextStyleExtension(
   options: TextStyleExtensionOptions = {},
-): VasaExtension<TextStyleExtensionRenderers> {
+): SkrivaExtension<TextStyleExtensionRenderers> {
   return {
     name: "textStyle",
     tiptap: createTextStyleMark(),

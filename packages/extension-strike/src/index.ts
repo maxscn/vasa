@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -14,7 +14,7 @@ export type StrikeExtensionRenderers = {
 };
 
 export type StrikeExtensionOptions = {
-  renderers?: VasaExtensionRenderers<StrikeExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<StrikeExtensionRenderers>;
 };
 
 const defaultStrikeRenderers = {
@@ -23,7 +23,7 @@ const defaultStrikeRenderers = {
 
 export function createStrikeExtension(
   options: StrikeExtensionOptions = {},
-): VasaExtension<StrikeExtensionRenderers> {
+): SkrivaExtension<StrikeExtensionRenderers> {
   return {
     name: "strike",
     tiptap: createStrikeMark(),

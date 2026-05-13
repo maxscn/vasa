@@ -34,6 +34,8 @@ type InlineMeasuredSegment = {
   text: string;
   start: number;
   width: number;
+  leadingGap?: number;
+  trailingWhitespaceWidth?: number;
   style?: TextStyle;
 };
 type InlineMeasureResult = {

@@ -1,21 +1,13 @@
 import type { ClipboardEvent, FormEvent, KeyboardEvent, MutableRefObject } from "react";
 import {
-  applyEditorSessionMutation,
-  editorClipboardMimeType,
-  getSelectedContent,
-  getSelectedHtml,
-  getSelectedText,
-  insertTextInEditorSession,
-  parseEditorHtml,
-  redoEditorSession,
-  runEditorSessionAction,
-  splitParagraph,
-  undoEditorSession,
-  type EditorJson,
+  type BrowserInputAdapter,
+  type JSONContent,
   type EditorRenderLineDocument,
   type EditorRenderLineOptions,
   type EditorSelection,
-  type EditorSession,
+  type SkrivaDeleteIntent,
+  type SkrivaShortcut,
+  type SkrivaSurfaceAdapter,
 } from "../src/index.ts";
 import {
   applyEditorKeymap,
@@ -25,14 +17,14 @@ import {
 } from "./keymap.ts";
 
 export type UseEditorInputOptions = {
-  editorDocument: EditorJson;
-  editorSessionRef: MutableRefObject<EditorSession>;
+  editorDocument: JSONContent;
   keymap?: EditorKeymap;
   measureText: (text: string, font?: string) => number;
   renderDocument: EditorRenderLineDocument;
   renderLineOptions: EditorRenderLineOptions;
   suppressedBeforeInputRef: MutableRefObject<Record<string, number>>;
-  updateEditor: (update: (session: EditorSession) => EditorSession) => void;
+  browserInput: BrowserInputAdapter;
+  surfaceAdapter?: SkrivaSurfaceAdapter;
   updateSelection: (
     nextSelection: EditorSelection | ((currentSelection: EditorSelection) => EditorSelection),
   ) => void;
@@ -43,28 +35,26 @@ export type UseEditorInputOptions = {
 };
 
 export function useEditorInput(options: UseEditorInputOptions) {
-  function applyEditorMutation(
-    mutate: (
-      doc: EditorJson,
-      currentSelection: EditorSelection,
-    ) => {
-      doc: EditorJson;
-      selection: EditorSelection;
-    },
-  ) {
-    options.updateEditor((session) => applyEditorSessionMutation(session, mutate));
-  }
-
-  function undoEditorChange() {
-    options.updateEditor(undoEditorSession);
-  }
-
-  function redoEditorChange() {
-    options.updateEditor(redoEditorSession);
-  }
-
   function suppressBeforeInput(inputType: string) {
     options.suppressedBeforeInputRef.current[inputType] = performance.now() + 250;
+  }
+
+  function dispatchSurfaceTextIntent(inputEvent: InputEvent) {
+    const intent = options.browserInput.readInputEvent(inputEvent);
+    if (intent === undefined) return false;
+
+    if (intent.type === "insertText")
+      return options.surfaceAdapter?.insertText(intent.text) ?? false;
+    if (intent.type === "insertLineBreak")
+      return options.surfaceAdapter?.insertLineBreak() ?? false;
+    if (intent.type === "splitBlock") return options.surfaceAdapter?.splitBlock() ?? false;
+    if (intent.type === "deleteBackward") {
+      return options.surfaceAdapter?.deleteBackward(intent.intent) ?? false;
+    }
+    if (intent.type === "deleteForward") {
+      return options.surfaceAdapter?.deleteForward(intent.intent) ?? false;
+    }
+    return options.surfaceAdapter?.runShortcut(intent.shortcut) ?? false;
   }
 
   function handleBeforeInput(event: FormEvent<HTMLTextAreaElement>) {
@@ -76,7 +66,7 @@ export function useEditorInput(options: UseEditorInputOptions) {
       return;
     }
 
-    if (inputEvent.inputType === "insertText" && inputEvent.data !== null) {
+    if (dispatchSurfaceTextIntent(inputEvent)) {
       event.preventDefault();
       return;
     }
@@ -100,25 +90,7 @@ export function useEditorInput(options: UseEditorInputOptions) {
       event.preventDefault();
     }
 
-    if (inputEvent.inputType === "historyUndo") {
-      event.preventDefault();
-      undoEditorChange();
-    }
-
-    if (inputEvent.inputType === "historyRedo") {
-      event.preventDefault();
-      redoEditorChange();
-    }
-
-    if (inputEvent.inputType === "insertParagraph") {
-      event.preventDefault();
-      applyEditorMutation(splitParagraph);
-    }
-
-    if (inputEvent.inputType === "insertLineBreak") {
-      event.preventDefault();
-      options.updateEditor((session) => insertTextInEditorSession(session, "\n"));
-    }
+    if (inputEvent.inputType === "insertParagraph") event.preventDefault();
   }
 
   function handleInput(event: FormEvent<HTMLTextAreaElement>) {
@@ -132,7 +104,7 @@ export function useEditorInput(options: UseEditorInputOptions) {
 
     const value = event.currentTarget.value;
     if (value.length > 0) {
-      options.updateEditor((session) => insertTextInEditorSession(session, value));
+      options.surfaceAdapter?.insertText(value);
     }
     event.currentTarget.value = "";
   }
@@ -140,47 +112,24 @@ export function useEditorInput(options: UseEditorInputOptions) {
   function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
     event.preventDefault();
     suppressBeforeInput("insertFromPaste");
-    const content = parseClipboardContent(event.clipboardData.getData(editorClipboardMimeType));
-    const htmlContent = content ?? parseEditorHtml(event.clipboardData.getData("text/html"));
-    const text = event.clipboardData.getData("text/plain");
-    options.updateEditor(
-      (session) =>
-        runEditorSessionAction(session, { type: "paste", text, content: htmlContent }).session,
-    );
+    options.surfaceAdapter?.pasteClipboard(event.clipboardData);
     event.currentTarget.value = "";
   }
 
   function handleCopy(event: ClipboardEvent<HTMLTextAreaElement>) {
     event.preventDefault();
-    const current = options.editorSessionRef.current;
-    const text = getSelectedText(current.doc, current.selection);
-    if (text.length > 0) {
-      event.clipboardData.setData("text/plain", text);
-      const content = getSelectedContent(current.doc, current.selection);
-      if (content !== undefined) {
-        event.clipboardData.setData(editorClipboardMimeType, JSON.stringify(content));
-        event.clipboardData.setData("text/html", getSelectedHtml(current.doc, current.selection));
-      }
-    }
+    options.surfaceAdapter?.copySelection(event.clipboardData);
   }
 
   function handleCut(event: ClipboardEvent<HTMLTextAreaElement>) {
     event.preventDefault();
-    const current = options.editorSessionRef.current;
-    const { session, result } = runEditorSessionAction(current, {
-      type: "cut",
-    });
-    if (result.clipboardText === undefined) return;
-
-    event.clipboardData.setData("text/plain", result.clipboardText);
-    if (result.clipboardContent !== undefined) {
-      event.clipboardData.setData(editorClipboardMimeType, JSON.stringify(result.clipboardContent));
-      event.clipboardData.setData("text/html", getSelectedHtml(current.doc, current.selection));
-    }
-    options.updateEditor(() => session);
+    options.surfaceAdapter?.cutSelection(event.clipboardData);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (handleSurfaceKeyDown(event)) return;
+    if (!isLegacyMovementKey(event)) return;
+
     applyEditorKeymap(
       event,
       {
@@ -188,21 +137,66 @@ export function useEditorInput(options: UseEditorInputOptions) {
         renderDocument: options.renderDocument,
         renderLineOptions: options.renderLineOptions,
         measureText: options.measureText,
-        updateEditor: options.updateEditor,
         updateSelection: options.updateSelection,
         suppressBeforeInput,
-        undo: undoEditorChange,
-        redo: redoEditorChange,
+        undo: () => options.surfaceAdapter?.runShortcut({ key: "z", mod: true }),
+        redo: () => options.surfaceAdapter?.runShortcut({ key: "z", mod: true, shift: true }),
         toggleBold: options.toggleBold,
         toggleMark: options.toggleMark,
         toggleBlockquote: options.toggleBlockquote,
         setBlockType: options.setBlockType,
-        insertLineBreak: () =>
-          options.updateEditor((session) => insertTextInEditorSession(session, "\n")),
-        splitParagraph: () => applyEditorMutation(splitParagraph),
+        insertLineBreak: () => options.surfaceAdapter?.insertLineBreak(),
+        splitParagraph: () => options.surfaceAdapter?.splitBlock(),
       },
       options.keymap ?? defaultEditorKeymap,
     );
+  }
+
+  function handleSurfaceKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      suppressBeforeInput("deleteContentBackward");
+      return (
+        options.surfaceAdapter?.deleteBackward({ granularity: deleteIntentGranularity(event) }) ??
+        false
+      );
+    }
+
+    if (event.key === "Delete") {
+      event.preventDefault();
+      suppressBeforeInput("deleteContentForward");
+      return (
+        options.surfaceAdapter?.deleteForward({ granularity: deleteIntentGranularity(event) }) ??
+        false
+      );
+    }
+
+    if (event.key === "Enter" && event.shiftKey) {
+      event.preventDefault();
+      suppressBeforeInput("insertLineBreak");
+      return options.surfaceAdapter?.insertLineBreak() ?? false;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      suppressBeforeInput("insertParagraph");
+      return options.surfaceAdapter?.splitBlock() ?? false;
+    }
+
+    const shortcut = shortcutForEvent(event);
+    if (shortcut !== undefined) {
+      const handled = options.surfaceAdapter?.runShortcut(shortcut) ?? false;
+      if (handled) event.preventDefault();
+      return handled;
+    }
+
+    if (isPrintableTextKey(event)) {
+      event.preventDefault();
+      suppressBeforeInput("insertText");
+      return options.surfaceAdapter?.insertText(event.key) ?? false;
+    }
+
+    return false;
   }
 
   return {
@@ -217,21 +211,33 @@ export function useEditorInput(options: UseEditorInputOptions) {
 
 export type UseEditorInputReturn = ReturnType<typeof useEditorInput>;
 
-function parseClipboardContent(value: string): EditorJson | undefined {
-  if (value.length === 0) return undefined;
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return isEditorJson(parsed) ? parsed : undefined;
-  } catch {
-    return undefined;
-  }
+function shortcutForEvent(event: KeyboardEvent<HTMLTextAreaElement>): SkrivaShortcut | undefined {
+  if (!(event.ctrlKey || event.metaKey || event.altKey)) return undefined;
+  return {
+    key: event.key.toLowerCase(),
+    mod: event.ctrlKey || event.metaKey,
+    alt: event.altKey,
+    shift: event.shiftKey,
+  };
 }
 
-function isEditorJson(value: unknown): value is EditorJson {
+function isPrintableTextKey(event: KeyboardEvent<HTMLTextAreaElement>) {
+  return event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey;
+}
+
+function deleteIntentGranularity(
+  event: KeyboardEvent<HTMLTextAreaElement>,
+): NonNullable<SkrivaDeleteIntent["granularity"]> {
+  if (event.metaKey || event.ctrlKey) return "line";
+  if (event.altKey) return "word";
+  return "character";
+}
+
+function isLegacyMovementKey(event: KeyboardEvent<HTMLTextAreaElement>) {
   return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { type?: unknown }).type === "string"
+    event.key === "ArrowLeft" ||
+    event.key === "ArrowRight" ||
+    event.key === "ArrowUp" ||
+    event.key === "ArrowDown"
   );
 }

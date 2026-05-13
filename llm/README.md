@@ -1,6 +1,6 @@
 # LLM Visual Feedback Loops
 
-This folder contains small agent-facing harnesses for rendering Vasa fixtures to images.
+This folder contains small agent-facing harnesses for rendering Skriva fixtures to images.
 
 Run the editor comparison loop with:
 

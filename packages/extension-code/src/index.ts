@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -14,7 +14,7 @@ export type CodeExtensionRenderers = {
 };
 
 export type CodeExtensionOptions = {
-  renderers?: VasaExtensionRenderers<CodeExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<CodeExtensionRenderers>;
 };
 
 const defaultCodeRenderers = {
@@ -23,7 +23,7 @@ const defaultCodeRenderers = {
 
 export function createCodeExtension(
   options: CodeExtensionOptions = {},
-): VasaExtension<CodeExtensionRenderers> {
+): SkrivaExtension<CodeExtensionRenderers> {
   return {
     name: "code",
     tiptap: createCodeMark(),

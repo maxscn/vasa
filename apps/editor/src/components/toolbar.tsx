@@ -17,7 +17,7 @@ import {
   toggleSubscript,
   toggleSuperscript,
   toggleUnderline,
-} from "@vasa/editor";
+} from "@opeinspection/skriva";
 import { useEditorShell } from "./editor-shell-context";
 import { MarkButton } from "./mark-button";
 import { SelectField } from "./select-field";
@@ -52,9 +52,9 @@ export function Toolbar() {
   return (
     <section className="editor-toolbar" aria-label="Document actions">
       <div>
-        <p className="eyebrow">Vasa</p>
+        <p className="eyebrow">Skriva</p>
         <h1 style={selectedBrandFont ? { fontFamily: selectedBrandFont.cssFamily } : undefined}>
-          Vasa
+          Skriva
         </h1>
       </div>
       <div className="toolbar-controls">
@@ -193,7 +193,7 @@ export function Toolbar() {
         </label>
         <a
           className="primary-action github-action"
-          href="https://github.com/maxscn/vasa"
+          href="https://github.com/maxscn/skriva"
           rel="noreferrer"
           target="_blank"
         >

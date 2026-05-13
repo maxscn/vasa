@@ -1,6 +1,11 @@
 import { expect, test } from "vite-plus/test";
-import { createFontRegistry } from "@vasa/font";
-import { registerEditorFonts } from "@vasa/editor";
+import {
+  createFontCatalog,
+  createFontRegistry,
+  createNativeFont,
+  googleFontManifest,
+} from "@opeinspection/skriva/font";
+import { registerEditorFonts } from "@opeinspection/skriva";
 import { webEditorConfig } from "../src/editor-config.ts";
 
 test("keeps the web editor Google font catalog available", () => {
@@ -42,4 +47,46 @@ test("registers web editor font metadata without eagerly loading every font", as
   expect(families).toContain("Roboto");
   expect(families).toContain("Merriweather");
   expect(fonts.filter((font) => font.data.kind === "outline")).toHaveLength(0);
+});
+
+test("validates complete local Google families as controlled", async () => {
+  const fonts = await registerEditorFonts({
+    registry: createFontRegistry(),
+    bundledFont: webEditorConfig.bundledFont,
+    fallbackFont: webEditorConfig.fallbackFont,
+    fontFamilies: webEditorConfig.fontFamilies,
+  });
+
+  expect(webEditorConfig.controlledFontFamilies).toEqual(
+    googleFontManifest.map((entry) => entry.family),
+  );
+  expect(() =>
+    createFontCatalog({
+      fonts,
+      controlledFamilies: webEditorConfig.controlledFontFamilies,
+    }),
+  ).not.toThrow();
+});
+
+test("resolves controlled faces from initial web font metadata", () => {
+  const metadataFonts = webEditorConfig.fontFamilies
+    .filter((font) => typeof font !== "string")
+    .map((font) =>
+      createNativeFont({
+        id: font.id ?? font.family.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-"),
+        family: font.family,
+        displayName: font.displayName ?? font.family,
+        weight: String(font.weight ?? "400"),
+        style: font.style ?? "normal",
+        fallbackFamilies: font.fallbackFamilies,
+      }),
+    );
+  const catalog = createFontCatalog({
+    fonts: [webEditorConfig.bundledFont, webEditorConfig.fallbackFont, ...metadataFonts],
+    controlledFamilies: webEditorConfig.controlledFontFamilies,
+  });
+
+  expect(catalog.resolveFace({ family: "Arimo", weight: "700", style: "italic" }).id).toBe(
+    "arimo-700-italic",
+  );
 });

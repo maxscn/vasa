@@ -16,7 +16,7 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "@vasa/layout": ["../layout/src/index.ts"]
+      "@skriva/layout": ["../layout/src/index.ts"]
     },
     "skipLibCheck": true
   },

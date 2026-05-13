@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -14,7 +14,7 @@ export type UnderlineExtensionRenderers = {
 };
 
 export type UnderlineExtensionOptions = {
-  renderers?: VasaExtensionRenderers<UnderlineExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<UnderlineExtensionRenderers>;
 };
 
 const defaultUnderlineRenderers = {
@@ -23,7 +23,7 @@ const defaultUnderlineRenderers = {
 
 export function createUnderlineExtension(
   options: UnderlineExtensionOptions = {},
-): VasaExtension<UnderlineExtensionRenderers> {
+): SkrivaExtension<UnderlineExtensionRenderers> {
   return {
     name: "underline",
     tiptap: createUnderlineMark(),

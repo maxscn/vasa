@@ -1,5 +1,5 @@
-import { Extension, type VasaExtension } from "@vasa/core";
-import { TextStyleMark } from "@vasa/extension-text-style";
+import { Extension, type SkrivaExtension } from "@skriva/core";
+import { TextStyleMark } from "@skriva/extension-text-style";
 
 type CommandChain = Record<string, (...args: unknown[]) => CommandChain> & {
   run: () => boolean;
@@ -9,7 +9,7 @@ type CommandProps = {
   chain: () => CommandChain;
 };
 
-export const FontFamily: VasaExtension = {
+export const FontFamily: SkrivaExtension = {
   name: "fontFamily",
   tiptap: Extension.create({
     name: "fontFamily",

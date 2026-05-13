@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -14,7 +14,7 @@ export type ItalicExtensionRenderers = {
 };
 
 export type ItalicExtensionOptions = {
-  renderers?: VasaExtensionRenderers<ItalicExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<ItalicExtensionRenderers>;
 };
 
 const defaultItalicRenderers = {
@@ -23,7 +23,7 @@ const defaultItalicRenderers = {
 
 export function createItalicExtension(
   options: ItalicExtensionOptions = {},
-): VasaExtension<ItalicExtensionRenderers> {
+): SkrivaExtension<ItalicExtensionRenderers> {
   return {
     name: "italic",
     tiptap: createItalicMark(),

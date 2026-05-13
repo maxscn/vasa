@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { isToolbarMarkActive } from "@vasa/editor";
+import { isToolbarMarkActive } from "@opeinspection/skriva";
 import { useEditorShell } from "./editor-shell-context";
 
 export function MarkButton({
@@ -26,6 +26,7 @@ export function MarkButton({
         !editor.disabledMarks.includes(mark) &&
         isToolbarMarkActive(editor.editorDocument, editor.selection, editor.storedMarks, mark)
       }
+      onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
       {children}

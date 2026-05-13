@@ -1,10 +1,5 @@
-export {
-  createPageGeometry,
-  layoutDocument,
-  layoutPage,
-  resolvePageMargin,
-  updatePageMarginGuide,
-} from "./box.ts";
+export { layoutDocument, layoutPage } from "./box.ts";
+export { createPageGeometry, resolvePageMargin, updatePageMarginGuide } from "./geometry.ts";
 export { paginatePrimitives } from "./pagination.ts";
 export type {
   PaginatePrimitivesOptions,

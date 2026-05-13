@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-italic",
+  "name": "@skriva/extension-italic",
   "version": "0.0.0",
-  "description": "Italic mark extension for Vasa.",
+  "description": "Italic mark extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,7 +22,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/core": "workspace:*"
+    "@skriva/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

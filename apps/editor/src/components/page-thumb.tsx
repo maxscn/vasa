@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { pageCanvasY, scrollEditorCanvasToPage } from "@vasa/editor";
+import { pageCanvasY, scrollEditorCanvasToPage } from "@opeinspection/skriva";
 import { useEditorShell } from "./editor-shell-context";
 
 export function PageThumb({

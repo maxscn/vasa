@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -14,7 +14,7 @@ export type BoldExtensionRenderers = {
 };
 
 export type BoldExtensionOptions = {
-  renderers?: VasaExtensionRenderers<BoldExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<BoldExtensionRenderers>;
 };
 
 const defaultBoldRenderers = {
@@ -23,7 +23,7 @@ const defaultBoldRenderers = {
 
 export function createBoldExtension(
   options: BoldExtensionOptions = {},
-): VasaExtension<BoldExtensionRenderers> {
+): SkrivaExtension<BoldExtensionRenderers> {
   return {
     name: "bold",
     tiptap: createBoldMark(),

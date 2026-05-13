@@ -1,6 +1,6 @@
-# @vasa/render-test
+# @skriva/render-test
 
-Pixel comparison utilities for validating Vasa renderer output.
+Pixel comparison utilities for validating Skriva renderer output.
 
 ## Development
 

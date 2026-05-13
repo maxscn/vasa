@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-line-height",
+  "name": "@skriva/extension-line-height",
   "version": "0.0.0",
-  "description": "Line height extension for Vasa.",
+  "description": "Line height extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,8 +22,8 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/core": "workspace:*",
-    "@vasa/extension-text-style": "workspace:*"
+    "@skriva/core": "workspace:*",
+    "@skriva/extension-text-style": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

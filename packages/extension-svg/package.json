@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-svg",
+  "name": "@skriva/extension-svg",
   "version": "0.0.0",
-  "description": "SVG node extension for Vasa.",
+  "description": "SVG node extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,11 +22,11 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/canvas": "workspace:*",
-    "@vasa/core": "workspace:*",
-    "@vasa/layout": "workspace:*",
-    "@vasa/pdf": "workspace:*",
-    "@vasa/renderer": "workspace:*"
+    "@skriva/canvas": "workspace:*",
+    "@skriva/core": "workspace:*",
+    "@skriva/layout": "workspace:*",
+    "@skriva/pdf": "workspace:*",
+    "@skriva/renderer": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

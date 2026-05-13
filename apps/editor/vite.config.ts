@@ -15,27 +15,27 @@ const config = defineConfig({
   resolve: {
     tsconfigPaths: true,
     alias: {
-      "@vasa/canvas": workspacePackage("../../packages/canvas/src/index.ts"),
-      "@vasa/core": workspacePackage("../../packages/core/src/index.ts"),
-      "@vasa/editor": workspacePackage("../../packages/editor/src/index.ts"),
-      "@vasa/extension-blockquote": workspacePackage(
-        "../../packages/extension-blockquote/src/index.ts",
+      "@opeinspection/skriva/canvas": workspacePackage("../../packages/editor/canvas.ts"),
+      "@opeinspection/skriva/enrichment": workspacePackage("../../packages/editor/enrichment.ts"),
+      "@opeinspection/skriva/enrichments/horizontal-rule": workspacePackage(
+        "../../packages/editor/enrichments/horizontal-rule.ts",
       ),
-      "@vasa/extension-code": workspacePackage("../../packages/extension-code/src/index.ts"),
-      "@vasa/extension-heading": workspacePackage("../../packages/extension-heading/src/index.ts"),
-      "@vasa/extension-horizontal-rule": workspacePackage(
-        "../../packages/extension-horizontal-rule/src/index.ts",
+      "@opeinspection/skriva/enrichments/line-height": workspacePackage(
+        "../../packages/editor/enrichments/line-height.ts",
       ),
-      "@vasa/extension-line-height": workspacePackage(
-        "../../packages/extension-line-height/src/index.ts",
+      "@opeinspection/skriva/enrichments/svg": workspacePackage(
+        "../../packages/editor/enrichments/svg.ts",
       ),
-      "@vasa/extension-svg": workspacePackage("../../packages/extension-svg/src/index.ts"),
-      "@vasa/extension-table": workspacePackage("../../packages/extension-table/src/index.ts"),
-      "@vasa/font": workspacePackage("../../packages/font/src/index.ts"),
-      "@vasa/layout": workspacePackage("../../packages/layout/src/index.ts"),
-      "@vasa/pdf": workspacePackage("../../packages/pdf/src/index.ts"),
-      "@vasa/renderer": workspacePackage("../../packages/renderer/src/index.ts"),
-      "@vasa/webgl": workspacePackage("../../packages/webgl/src/index.ts"),
+      "@opeinspection/skriva/enrichments/table": workspacePackage(
+        "../../packages/editor/enrichments/table.ts",
+      ),
+      "@opeinspection/skriva/font": workspacePackage("../../packages/editor/font.ts"),
+      "@opeinspection/skriva/headless": workspacePackage("../../packages/editor/headless.ts"),
+      "@opeinspection/skriva/layout": workspacePackage("../../packages/editor/layout.ts"),
+      "@opeinspection/skriva/pdf": workspacePackage("../../packages/editor/pdf.ts"),
+      "@opeinspection/skriva/react": workspacePackage("../../packages/editor/react.ts"),
+      "@opeinspection/skriva/renderer": workspacePackage("../../packages/editor/renderer.ts"),
+      "@opeinspection/skriva": workspacePackage("../../packages/editor/src/index.ts"),
     },
   },
   plugins: [

@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-text-style",
+  "name": "@skriva/extension-text-style",
   "version": "0.0.0",
-  "description": "Text style mark extension for Vasa.",
+  "description": "Text style mark extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,7 +22,7 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/core": "workspace:*"
+    "@skriva/core": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

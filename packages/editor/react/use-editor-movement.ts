@@ -4,11 +4,12 @@ import {
   editorTextLineAtSelection,
   selectLineAtPoint,
   selectWordAtPoint,
-  type EditorJson,
+  type JSONContent,
   type EditorRenderLineDocument,
   type EditorRenderLineOptions,
   type EditorSelection,
   type EditorSelectionPoint,
+  type SkrivaSurfaceAdapter,
 } from "../src/index.ts";
 import { hitTestCanvas } from "../src/browser.ts";
 
@@ -23,7 +24,7 @@ type CanvasClickSequence = {
 
 export type UseEditorMovementOptions = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
-  editorDocument: EditorJson;
+  editorDocument: JSONContent;
   renderDocument: EditorRenderLineDocument;
   renderLineOptions: EditorRenderLineOptions;
   measureText: (text: string, font?: string) => number;
@@ -31,6 +32,7 @@ export type UseEditorMovementOptions = {
   updateSelection: (
     nextSelection: EditorSelection | ((currentSelection: EditorSelection) => EditorSelection),
   ) => void;
+  surfaceAdapter?: SkrivaSurfaceAdapter;
   focusKeyboardBridge: () => void;
   multiClickIntervalMs?: number;
   multiClickMaxDistancePx?: number;
@@ -63,18 +65,20 @@ export function useEditorMovement(options: UseEditorMovementOptions) {
     if (clickCount >= 3) {
       dragAnchorRef.current = undefined;
       canvas.setPointerCapture(event.pointerId);
-      options.updateSelection(
-        selectLineAtPoint(
-          point,
-          editorTextLineAtSelection(options.renderDocument, point, options.renderLineOptions),
-        ),
+      const line = editorTextLineAtSelection(
+        options.renderDocument,
+        point,
+        options.renderLineOptions,
       );
+      options.surfaceAdapter?.selectLineAt(point, line);
+      options.updateSelection(selectLineAtPoint(point, line));
       return;
     }
 
     if (clickCount === 2) {
       dragAnchorRef.current = undefined;
       canvas.setPointerCapture(event.pointerId);
+      options.surfaceAdapter?.selectWordAt(point);
       options.updateSelection(selectWordAtPoint(options.editorDocument, point));
       return;
     }
@@ -83,6 +87,11 @@ export function useEditorMovement(options: UseEditorMovementOptions) {
     const anchor = event.shiftKey ? (currentSelection.anchor ?? currentSelection) : point;
     dragAnchorRef.current = anchor;
     canvas.setPointerCapture(event.pointerId);
+    if (event.shiftKey) {
+      options.surfaceAdapter?.extendSelectionTo(point);
+    } else {
+      options.surfaceAdapter?.placeSelectionAt(point);
+    }
     options.updateSelection(createSelection(point, event.shiftKey ? anchor : undefined));
   }
 
@@ -99,7 +108,10 @@ export function useEditorMovement(options: UseEditorMovementOptions) {
       options.measureText,
       options.renderLineOptions,
     );
-    if (point !== undefined) options.updateSelection(createSelection(point, anchor));
+    if (point !== undefined) {
+      options.surfaceAdapter?.extendSelectionTo(point);
+      options.updateSelection(createSelection(point, anchor));
+    }
   }
 
   function handleCanvasPointerUp(event: ReactPointerEvent<HTMLCanvasElement>) {

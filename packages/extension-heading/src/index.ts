@@ -1,4 +1,4 @@
-import { Node, type VasaExtension } from "@vasa/core";
+import { Node, type SkrivaExtension } from "@skriva/core";
 
 type Level = 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -10,7 +10,7 @@ export type HeadingAttributes = {
   level: Level;
 };
 
-export const Heading: VasaExtension = {
+export const Heading: SkrivaExtension = {
   name: "heading",
   tiptap: Node.create({
     name: "heading",

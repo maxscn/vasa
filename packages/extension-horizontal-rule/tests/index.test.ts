@@ -1,7 +1,7 @@
-import { buildCanvasScene, createCanvasCommands } from "@vasa/canvas";
-import { layoutDocument, type LayoutOptions } from "@vasa/layout";
-import { createPdfCommands } from "@vasa/pdf";
-import { createRenderDocument } from "@vasa/renderer";
+import { Scene, createCanvasCommands } from "@skriva/canvas";
+import { layoutDocument, type LayoutOptions } from "@skriva/layout";
+import { createPdfCommands } from "@skriva/pdf";
+import { createRenderDocument } from "@skriva/renderer";
 import { expect, test } from "vite-plus/test";
 import { createHorizontalRuleNode, HorizontalRule } from "../src/index.ts";
 
@@ -32,7 +32,7 @@ test("renders horizontal rules as matching canvas and PDF rectangles", () => {
   );
   const renderDocument = createRenderDocument(layout);
   const canvasCommands = createCanvasCommands(
-    buildCanvasScene(renderDocument, { extensions: asArray(HorizontalRule.renderers?.canvas) }),
+    Scene(renderDocument, { extensions: asArray(HorizontalRule.renderers?.canvas) }),
   );
   const pdfCommands = createPdfCommands(renderDocument, page, {
     renderers: asArray(HorizontalRule.renderers?.pdf),

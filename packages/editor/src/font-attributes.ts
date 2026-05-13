@@ -1,25 +1,26 @@
-import { Bold } from "@vasa/extension-bold";
-import { Blockquote } from "@vasa/extension-blockquote";
-import { Code } from "@vasa/extension-code";
-import { Color } from "@vasa/extension-color";
-import { Document } from "@vasa/extension-document";
-import { FontFamily } from "@vasa/extension-font-family";
-import { FontSize } from "@vasa/extension-font-size";
-import { Heading } from "@vasa/extension-heading";
-import { Highlight } from "@vasa/extension-highlight";
-import { HorizontalRule } from "@vasa/extension-horizontal-rule";
-import { Italic } from "@vasa/extension-italic";
-import { LineHeight } from "@vasa/extension-line-height";
-import { Paragraph } from "@vasa/extension-paragraph";
-import { Strike } from "@vasa/extension-strike";
-import { Subscript } from "@vasa/extension-subscript";
-import { Superscript } from "@vasa/extension-superscript";
-import { TableExtension } from "@vasa/extension-table";
-import { Text } from "@vasa/extension-text";
-import { TextStyleMark } from "@vasa/extension-text-style";
-import { Underline } from "@vasa/extension-underline";
-import type { VasaExtension } from "@vasa/core";
-import type { EditorJson, EditorSelection, EditorSelectionPoint } from "./index.ts";
+import { Bold } from "@skriva/extension-bold";
+import { Blockquote } from "@skriva/extension-blockquote";
+import { Code } from "@skriva/extension-code";
+import { Color } from "@skriva/extension-color";
+import { Document } from "@skriva/extension-document";
+import { FontFamily } from "@skriva/extension-font-family";
+import { FontSize } from "@skriva/extension-font-size";
+import { Heading } from "@skriva/extension-heading";
+import { Highlight } from "@skriva/extension-highlight";
+import { HorizontalRule } from "@skriva/extension-horizontal-rule";
+import { Italic } from "@skriva/extension-italic";
+import { LineHeight } from "@skriva/extension-line-height";
+import { Paragraph } from "@skriva/extension-paragraph";
+import { Strike } from "@skriva/extension-strike";
+import { Subscript } from "@skriva/extension-subscript";
+import { Superscript } from "@skriva/extension-superscript";
+import { TableExtension } from "@skriva/extension-table";
+import { Text } from "@skriva/extension-text";
+import { TextStyleMark } from "@skriva/extension-text-style";
+import { Underline } from "@skriva/extension-underline";
+import type { SkrivaExtension } from "@skriva/core";
+import { GapCursor } from "./gap-cursor.ts";
+import type { JSONContent, EditorSelection, EditorSelectionPoint } from "./model.ts";
 
 export type EditorTextStyleAttributes = {
   fontId?: string;
@@ -50,16 +51,16 @@ export type EditorExtensionRenderers = {
   textStyle: (context: EditorMarkRenderContext) => EditorTextStyleAttributes | undefined;
 };
 
-export type EditorMarkExtension = VasaExtension<EditorExtensionRenderers> & { type: "mark" };
+export type EditorMarkExtension = SkrivaExtension<EditorExtensionRenderers> & { type: "mark" };
 
-export type EditorCommandExtension = VasaExtension & {
+export type EditorCommandExtension = SkrivaExtension & {
   type: "extension";
 };
 
 export type EditorExtension = EditorMarkExtension | EditorCommandExtension;
 
 export type EditorCommandState = {
-  doc: EditorJson;
+  doc: JSONContent;
   selection: EditorSelection;
 };
 
@@ -93,26 +94,27 @@ export function createEditorExtension(
   return { type: "extension", ...extension };
 }
 
-export { Bold } from "@vasa/extension-bold";
-export { Blockquote } from "@vasa/extension-blockquote";
-export { Code } from "@vasa/extension-code";
-export { Color } from "@vasa/extension-color";
-export { Document } from "@vasa/extension-document";
-export { FontFamily } from "@vasa/extension-font-family";
-export { FontSize } from "@vasa/extension-font-size";
-export { Heading } from "@vasa/extension-heading";
-export { Highlight } from "@vasa/extension-highlight";
-export { HorizontalRule } from "@vasa/extension-horizontal-rule";
-export { Italic } from "@vasa/extension-italic";
-export { LineHeight } from "@vasa/extension-line-height";
-export { Paragraph } from "@vasa/extension-paragraph";
-export { Strike } from "@vasa/extension-strike";
-export { Subscript } from "@vasa/extension-subscript";
-export { Superscript } from "@vasa/extension-superscript";
-export { TableExtension } from "@vasa/extension-table";
-export { Text } from "@vasa/extension-text";
-export { TextStyleMark } from "@vasa/extension-text-style";
-export { Underline } from "@vasa/extension-underline";
+export { Bold } from "@skriva/extension-bold";
+export { Blockquote } from "@skriva/extension-blockquote";
+export { Code } from "@skriva/extension-code";
+export { Color } from "@skriva/extension-color";
+export { Document } from "@skriva/extension-document";
+export { FontFamily } from "@skriva/extension-font-family";
+export { FontSize } from "@skriva/extension-font-size";
+export { Heading } from "@skriva/extension-heading";
+export { Highlight } from "@skriva/extension-highlight";
+export { HorizontalRule } from "@skriva/extension-horizontal-rule";
+export { Italic } from "@skriva/extension-italic";
+export { LineHeight } from "@skriva/extension-line-height";
+export { Paragraph } from "@skriva/extension-paragraph";
+export { Strike } from "@skriva/extension-strike";
+export { Subscript } from "@skriva/extension-subscript";
+export { Superscript } from "@skriva/extension-superscript";
+export { TableExtension } from "@skriva/extension-table";
+export { Text } from "@skriva/extension-text";
+export { TextStyleMark } from "@skriva/extension-text-style";
+export { Underline } from "@skriva/extension-underline";
+export { GapCursor } from "./gap-cursor.ts";
 
 export const defaultEditorMarkExtensions: EditorMarkExtension[] = [
   createEditorMarkExtension(TextStyleMark),
@@ -127,6 +129,7 @@ export const defaultEditorMarkExtensions: EditorMarkExtension[] = [
 ];
 export const defaultEditorExtensions: EditorExtension[] = [
   createEditorExtension(Document),
+  createEditorExtension(GapCursor),
   createEditorExtension(Paragraph),
   createEditorExtension(Text),
   createEditorExtension(Heading),
@@ -141,112 +144,112 @@ export const defaultEditorExtensions: EditorExtension[] = [
 ];
 
 export function applyTextStyleToSelection(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   style: EditorTextStyleAttributes,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "setMark", TextStyleMark.name, style).state;
 }
 
 export function setFontFamily(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   fontId: string,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "setFontFamily", fontId).state;
 }
 
 export function unsetFontFamily(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "unsetFontFamily").state;
 }
 
 export function setFontSize(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   fontSize: number,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "setFontSize", fontSize).state;
 }
 
 export function unsetFontSize(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "unsetFontSize").state;
 }
 
 export function setLineHeight(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   lineHeight: number,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "setLineHeight", lineHeight).state;
 }
 
 export function unsetLineHeight(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return runEditorCommand({ doc, selection }, "unsetLineHeight").state;
 }
 
-export function toggleBold(doc: EditorJson, selection: EditorSelection) {
+export function toggleBold(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "toggleBold").state;
 }
 
-export function toggleItalic(doc: EditorJson, selection: EditorSelection) {
+export function toggleItalic(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "toggleItalic").state;
 }
 
-export function toggleUnderline(doc: EditorJson, selection: EditorSelection) {
+export function toggleUnderline(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "toggleUnderline").state;
 }
 
-export function toggleStrike(doc: EditorJson, selection: EditorSelection) {
+export function toggleStrike(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "toggleStrike").state;
 }
 
-export function toggleCode(doc: EditorJson, selection: EditorSelection) {
+export function toggleCode(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "toggleCode").state;
 }
 
 export function toggleHighlight(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   attrs: Record<string, unknown> = {},
 ) {
   return runEditorCommand({ doc, selection }, "toggleHighlight", attrs).state;
 }
 
-export function toggleSuperscript(doc: EditorJson, selection: EditorSelection) {
+export function toggleSuperscript(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "toggleSuperscript").state;
 }
 
-export function toggleSubscript(doc: EditorJson, selection: EditorSelection) {
+export function toggleSubscript(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "toggleSubscript").state;
 }
 
-export function setColor(doc: EditorJson, selection: EditorSelection, color: string) {
+export function setColor(doc: JSONContent, selection: EditorSelection, color: string) {
   return runEditorCommand({ doc, selection }, "setColor", color).state;
 }
 
-export function unsetColor(doc: EditorJson, selection: EditorSelection) {
+export function unsetColor(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "unsetColor").state;
 }
 
-export function setBold(doc: EditorJson, selection: EditorSelection) {
+export function setBold(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "setBold").state;
 }
 
-export function unsetBold(doc: EditorJson, selection: EditorSelection) {
+export function unsetBold(doc: JSONContent, selection: EditorSelection) {
   return runEditorCommand({ doc, selection }, "unsetBold").state;
 }
 
 export function currentEditorTextStyleAttrs(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   storedMarks: EditorMarkSpec[] = [],
 ): EditorTextStyleAttributes {
@@ -265,7 +268,7 @@ export function currentEditorTextStyleAttrs(
 }
 
 function commonSelectedTextStyleAttrs(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
 ): EditorTextStyleAttributes | undefined {
   const range = normalizeSelectionRange(doc, selection);
@@ -291,7 +294,7 @@ function isExpandedSelection(selection: EditorSelection) {
 }
 
 function collectSelectedTextStyleAttrs(
-  node: EditorJson,
+  node: JSONContent,
   path: number[],
   range: { start: EditorSelectionPoint; end: EditorSelectionPoint },
 ): EditorTextStyleAttributes[] {
@@ -458,35 +461,35 @@ function collectEditorCommandSpecs(extensions: EditorExtension[]) {
 }
 
 export function toggleMark(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   type: string,
   attrs: EditorMarkAttributes = {},
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return isMarkActive(doc, selection, type, attrs)
     ? unsetMark(doc, selection, type)
     : setMark(doc, selection, type, attrs);
 }
 
 export function setMark(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   type: string,
   attrs: EditorMarkAttributes = {},
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return applyMarkToSelection(doc, selection, { type, attrs });
 }
 
 export function unsetMark(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   type: string,
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   return applyMarkToSelection(doc, selection, { type }, { remove: true });
 }
 
 export function isMarkActive(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   type: string,
   attrs: EditorMarkAttributes = {},
@@ -524,11 +527,11 @@ export function isMarkActive(
 }
 
 function applyMarkToSelection(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   mark: EditorMarkSpec,
   options: { remove?: boolean } = {},
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   if (selection.anchor === undefined) return { doc, selection };
 
   const focus = { path: selection.path, offset: selection.offset };
@@ -538,7 +541,7 @@ function applyMarkToSelection(
     return applyMarkAcrossTextNodes(doc, selection, mark, options);
   }
 
-  const nextDoc = cloneEditorJson(doc);
+  const nextDoc = cloneJsonContent(doc);
   const nextRange = selectionRangeInSingleParent(nextDoc, selection);
   if (nextRange === undefined) return { doc, selection };
 
@@ -598,22 +601,22 @@ function applyMarkToSelection(
 }
 
 function applyMarkAcrossTextNodes(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   mark: EditorMarkSpec,
   options: { remove?: boolean },
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   const range = normalizeSelectionRange(doc, selection);
   if (comparePoints(range.start, range.end) === 0) return { doc, selection };
 
-  const nextDoc = cloneEditorJson(doc);
+  const nextDoc = cloneJsonContent(doc);
   rewriteSelectedTextNodes(nextDoc, [], range, mark, options);
 
   return { doc: mergeAdjacentTextNodes(nextDoc), selection };
 }
 
 function rewriteSelectedTextNodes(
-  node: EditorJson,
+  node: JSONContent,
   path: number[],
   range: { start: EditorSelectionPoint; end: EditorSelectionPoint },
   mark: EditorMarkSpec,
@@ -654,7 +657,7 @@ function rewriteSelectedTextNodes(
   }
 }
 
-function normalizeSelectionRange(selectionDoc: EditorJson, selection: EditorSelection) {
+function normalizeSelectionRange(selectionDoc: JSONContent, selection: EditorSelection) {
   const focus = normalizeSelectionPoint(selectionDoc, selection);
   const anchor = normalizeSelectionPoint(selectionDoc, selection.anchor ?? selection);
 
@@ -664,7 +667,7 @@ function normalizeSelectionRange(selectionDoc: EditorJson, selection: EditorSele
 }
 
 function normalizeSelectionPoint(
-  doc: EditorJson,
+  doc: JSONContent,
   point: EditorSelectionPoint,
 ): EditorSelectionPoint {
   const path = normalizeTextPath(doc, point.path);
@@ -673,7 +676,7 @@ function normalizeSelectionPoint(
   return { path, offset: clampOffset(point.offset, text) };
 }
 
-function selectionRangeInSingleParent(doc: EditorJson, selection: EditorSelection) {
+function selectionRangeInSingleParent(doc: JSONContent, selection: EditorSelection) {
   if (selection.anchor === undefined) return undefined;
 
   const focus = { path: selection.path, offset: selection.offset };
@@ -698,7 +701,7 @@ function selectionRangeInSingleParent(doc: EditorJson, selection: EditorSelectio
   };
 }
 
-function createTextFragment(node: EditorJson, text: string): EditorJson {
+function createTextFragment(node: JSONContent, text: string): JSONContent {
   return {
     ...node,
     text,
@@ -706,11 +709,11 @@ function createTextFragment(node: EditorJson, text: string): EditorJson {
 }
 
 function createMarkedTextFragment(
-  node: EditorJson,
+  node: JSONContent,
   text: string,
   mark: EditorMarkSpec,
   options: { remove?: boolean },
-): EditorJson {
+): JSONContent {
   const marks = options.remove
     ? removeMark(node.marks, mark.type)
     : upsertMark(node.marks, mark.type, mark.attrs);
@@ -724,10 +727,10 @@ function createMarkedTextFragment(
 }
 
 function upsertMark(
-  marks: EditorJson["marks"] = [],
+  marks: JSONContent["marks"] = [],
   type: string,
   attrs: EditorMarkAttributes = {},
-): EditorJson["marks"] {
+): JSONContent["marks"] {
   const existing = marks.find((mark) => mark.type === type);
   const mergedAttrs = removeEmptyAttrs({ ...existing?.attrs, ...attrs });
   const next = marks.filter((mark) => mark.type !== type);
@@ -745,8 +748,8 @@ function removeEmptyAttrs(attrs: EditorMarkAttributes) {
   );
 }
 
-function getEditorNodeAtPath(doc: EditorJson, path: number[]): EditorJson | undefined {
-  let current: EditorJson | undefined = doc;
+function getEditorNodeAtPath(doc: JSONContent, path: number[]): JSONContent | undefined {
+  let current: JSONContent | undefined = doc;
 
   for (const index of path) {
     current = current?.content?.[index];
@@ -755,12 +758,12 @@ function getEditorNodeAtPath(doc: EditorJson, path: number[]): EditorJson | unde
   return current;
 }
 
-function removeMark(marks: EditorJson["marks"] = [], type: string): EditorJson["marks"] {
+function removeMark(marks: JSONContent["marks"] = [], type: string): JSONContent["marks"] {
   const next = marks.filter((mark) => mark.type !== type);
   return next.length === 0 ? undefined : next;
 }
 
-function findMark(node: EditorJson, type: string, attrs: EditorMarkAttributes) {
+function findMark(node: JSONContent, type: string, attrs: EditorMarkAttributes) {
   return node.marks
     ?.filter((mark) => mark.type === type)
     .find((mark) => objectIncludes(mark.attrs ?? {}, attrs));
@@ -770,12 +773,12 @@ function objectIncludes(object: EditorMarkAttributes, subset: EditorMarkAttribut
   return Object.entries(subset).every(([key, value]) => object[key] === value);
 }
 
-function mergeAdjacentTextNodes(doc: EditorJson): EditorJson {
+function mergeAdjacentTextNodes(doc: JSONContent): JSONContent {
   if (doc.content === undefined) return doc;
 
   doc.content = doc.content.map((child) => mergeAdjacentTextNodes(child));
 
-  const merged: EditorJson[] = [];
+  const merged: JSONContent[] = [];
   for (const child of doc.content) {
     const previous = merged.at(-1);
     if (previous?.type === "text" && child.type === "text" && sameAttrs(previous, child)) {
@@ -789,15 +792,15 @@ function mergeAdjacentTextNodes(doc: EditorJson): EditorJson {
   return doc;
 }
 
-function sameAttrs(left: EditorJson, right: EditorJson) {
+function sameAttrs(left: JSONContent, right: JSONContent) {
   return (
     JSON.stringify(left.attrs ?? {}) === JSON.stringify(right.attrs ?? {}) &&
     JSON.stringify(left.marks ?? []) === JSON.stringify(right.marks ?? [])
   );
 }
 
-function getNodeAtPath(doc: EditorJson, path: number[]): EditorJson | undefined {
-  let current: EditorJson | undefined = doc;
+function getNodeAtPath(doc: JSONContent, path: number[]): JSONContent | undefined {
+  let current: JSONContent | undefined = doc;
 
   for (const index of path) {
     current = current?.content?.[index];
@@ -806,19 +809,19 @@ function getNodeAtPath(doc: EditorJson, path: number[]): EditorJson | undefined 
   return current;
 }
 
-function getTextAtPath(doc: EditorJson, path: number[]) {
+function getTextAtPath(doc: JSONContent, path: number[]) {
   const node = getNodeAtPath(doc, path);
   return node?.type === "text" ? (node.text ?? "") : "";
 }
 
-function normalizeTextPath(doc: EditorJson, path: number[]): number[] {
+function normalizeTextPath(doc: JSONContent, path: number[]): number[] {
   const node = getNodeAtPath(doc, path);
   if (node?.type === "text") return path;
 
   return firstTextPathInNode(node, path) ?? firstTextPathInNode(doc, []) ?? path;
 }
 
-function firstTextPathInNode(node: EditorJson | undefined, path: number[]): number[] | undefined {
+function firstTextPathInNode(node: JSONContent | undefined, path: number[]): number[] | undefined {
   if (node?.type === "text") return path;
 
   for (const [index, child] of (node?.content ?? []).entries()) {
@@ -853,8 +856,8 @@ function comparePaths(left: number[], right: number[]) {
   return 0;
 }
 
-function cloneEditorJson(doc: EditorJson): EditorJson {
-  return JSON.parse(JSON.stringify(doc)) as EditorJson;
+function cloneJsonContent(doc: JSONContent): JSONContent {
+  return JSON.parse(JSON.stringify(doc)) as JSONContent;
 }
 
 function clampOffset(offset: number, text: string) {
@@ -862,7 +865,7 @@ function clampOffset(offset: number, text: string) {
 }
 
 function pointToParagraphOffset(
-  parent: EditorJson,
+  parent: JSONContent,
   point: Pick<EditorSelection, "path" | "offset">,
 ) {
   const textIndex = point.path.at(-1) ?? 0;
@@ -877,7 +880,7 @@ function pointToParagraphOffset(
   return offset + clampOffset(point.offset, text);
 }
 
-function paragraphOffsetToPoint(parentPath: number[], parent: EditorJson, targetOffset: number) {
+function paragraphOffsetToPoint(parentPath: number[], parent: JSONContent, targetOffset: number) {
   let offset = Math.max(0, targetOffset);
   const children = parent.content ?? [];
   let lastTextIndex = 0;

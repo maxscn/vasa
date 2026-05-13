@@ -1,12 +1,21 @@
 import {
-  useEditor,
-  type EditorConfig,
-  type EditorProps,
-  type UseEditorReturn,
+  useSkrivaEditor,
+  type SkrivaEditorConfig,
+  type SkrivaEditorProps,
+  type SkrivaEditorSurfaceDropContext,
+  type SkrivaEditorSurfaceDropHandler,
+  type UseSkrivaEditorReturn,
 } from "./use-editor.ts";
 import { useEditorFonts, type UseEditorFontsReturn } from "./use-editor-fonts.ts";
 import { useEditorPdf, type UseEditorPdfReturn } from "./use-editor-pdf.ts";
 
+export { SkrivaCanvasEditor, type SkrivaCanvasEditorProps } from "./canvas-editor.tsx";
+export {
+  SkrivaEditorShellProvider,
+  useOptionalSkrivaEditorShell,
+  useSkrivaEditorShell,
+  type SkrivaEditorShellContextValue,
+} from "./editor-shell-context.tsx";
 export {
   applyEditorKeymap,
   defaultEditorKeymap,
@@ -14,7 +23,7 @@ export {
   editorKeyForEvent,
   editorTextKeymap,
 } from "./keymap.ts";
-export { useEditor };
+export { useSkrivaEditor };
 export { useEditorFonts };
 export { useEditorPdf };
 export {
@@ -27,10 +36,12 @@ export {
   selectedRenderPageIndex,
 } from "./shell-utils.ts";
 export type {
-  EditorConfig,
-  EditorProps,
+  SkrivaEditorConfig,
+  SkrivaEditorProps,
+  SkrivaEditorSurfaceDropContext,
+  SkrivaEditorSurfaceDropHandler,
   UseEditorFontsReturn,
-  UseEditorReturn,
+  UseSkrivaEditorReturn,
   UseEditorPdfReturn,
 };
 export type { EditorKeymap, EditorKeymapHandler, EditorKeymapOptions } from "./keymap.ts";

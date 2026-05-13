@@ -1,5 +1,5 @@
-import type { Rect } from "@vasa/layout";
-import type { RenderCustomNode, SvgPath } from "@vasa/renderer";
+import type { Rect } from "@skriva/layout";
+import type { RenderCustomNode, SvgPath } from "@skriva/renderer";
 
 export function rectPath(rect: Rect): SvgPath {
   return {

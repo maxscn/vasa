@@ -1,5 +1,8 @@
-import type { PdfCommand } from "@vasa/pdf";
+import type { PdfCommand } from "@skriva/pdf";
 export declare const tablePdfRenderer: {
   name: string;
-  toPdfCommands({ node }: import("@vasa/pdf").PdfRenderNodeContext): PdfCommand[] | undefined;
+  toPdfCommands({
+    node,
+    renderNode,
+  }: import("@skriva/pdf").PdfRenderNodeContext): PdfCommand[] | undefined;
 };

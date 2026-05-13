@@ -16,10 +16,20 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "@vasa/layout": ["../layout/src/index.ts"],
-      "@vasa/renderer": ["../renderer/src/index.ts"]
+      "@opeinspection/skriva": ["../editor/src/index.ts"],
+      "@opeinspection/skriva/canvas": ["../editor/canvas.ts"],
+      "@opeinspection/skriva/enrichment": ["../editor/enrichment.ts"],
+      "@opeinspection/skriva/enrichments/*": ["../editor/enrichments/*.ts"],
+      "@opeinspection/skriva/font": ["../editor/font.ts"],
+      "@opeinspection/skriva/headless": ["../editor/headless.ts"],
+      "@opeinspection/skriva/layout": ["../editor/layout.ts"],
+      "@opeinspection/skriva/pdf": ["../editor/pdf.ts"],
+      "@opeinspection/skriva/react": ["../editor/react.ts"],
+      "@opeinspection/skriva/renderer": ["../editor/renderer.ts"],
+      "@skriva/layout": ["../layout/src/index.ts"],
+      "@skriva/renderer": ["../renderer/src/index.ts"]
     },
     "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src", "tests"]
 }

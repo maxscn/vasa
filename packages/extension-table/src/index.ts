@@ -1,13 +1,13 @@
 import { TableKit, type TableKitOptions } from "@tiptap/extension-table";
-import type { CanvasRendererExtension } from "@vasa/canvas";
+import type { CanvasRendererExtension } from "@skriva/canvas";
 import {
   mergeExtensionRenderers,
   type ExtensionRendererPlacement,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
-import type { LayoutExtension, LayoutNode, LayoutPage, LayoutStyle } from "@vasa/layout";
-import type { PdfRendererExtension } from "@vasa/pdf";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
+import type { LayoutExtension, LayoutNode, LayoutPage, LayoutStyle } from "@skriva/layout";
+import type { PdfRendererExtension } from "@skriva/pdf";
 import { tableCanvasRenderer } from "./renderers/canvas.js";
 import { tablePdfRenderer } from "./renderers/pdf.js";
 
@@ -42,13 +42,12 @@ export type TableCellNode = {
 
 export type TableExtensionRenderers = {
   canvas: CanvasRendererExtension;
-  webgl: CanvasRendererExtension;
   pdf: PdfRendererExtension;
 };
 
 export type TableExtensionOptions = {
   tiptap?: Partial<TableKitOptions>;
-  renderers?: VasaExtensionRenderers<TableExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<TableExtensionRenderers>;
   rendererPlacement?: ExtensionRendererPlacement;
 };
 
@@ -65,7 +64,7 @@ export type CreateTableNodeOptions = Omit<TableNode, "type" | "children"> & {
   }>;
 };
 
-declare module "@vasa/layout" {
+declare module "@skriva/layout" {
   interface LayoutNodeByType {
     table: TableNode;
     tableRow: TableRowNode;
@@ -112,7 +111,7 @@ export function createTableNode(options: CreateTableNodeOptions): TableNode {
 
 export function createTableExtension(
   options: TableExtensionOptions = {},
-): VasaExtension<TableExtensionRenderers> {
+): SkrivaExtension<TableExtensionRenderers> {
   return {
     name: "table",
     tiptap: TableKit.configure({
@@ -128,11 +127,6 @@ export function createTableExtension(
       canvas: mergeExtensionRenderers(
         tableRenderers.canvas,
         options.renderers?.canvas,
-        options.rendererPlacement,
-      ),
-      webgl: mergeExtensionRenderers(
-        tableRenderers.webgl,
-        options.renderers?.webgl,
         options.rendererPlacement,
       ),
       pdf: mergeExtensionRenderers(
@@ -185,13 +179,12 @@ const tableRenderExtension = {
       children,
     };
   },
-} satisfies NonNullable<VasaExtension["renderer"]>;
+} satisfies NonNullable<SkrivaExtension["renderer"]>;
 
-const tableRenderers = {
+const tableRenderers: TableExtensionRenderers = {
   canvas: tableCanvasRenderer,
-  webgl: tableCanvasRenderer,
   pdf: tablePdfRenderer,
-} satisfies TableExtensionRenderers;
+};
 
 function isTableRenderBox(type: string) {
   return type === "table" || type === "tableRow" || isTableCellType(type);

@@ -1,16 +1,16 @@
 import {
-  createCanvasRenderer,
+  Canvas,
   type CanvasRendererExtension,
   type CanvasSurface,
   type CanvasTextPaint,
-} from "@vasa/canvas";
+} from "@skriva/canvas";
 import { createCanvas, GlobalFonts } from "@napi-rs/canvas";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
-import type { LayoutBox, LayoutOptions, LayoutResult } from "@vasa/layout";
-import type { RenderDocument, TextOutlineFont } from "@vasa/renderer";
+import type { LayoutBox, LayoutOptions, LayoutResult } from "@skriva/layout";
+import type { RenderDocument, TextOutlineFont } from "@skriva/renderer";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 export type RenderTestImage = {
@@ -214,7 +214,7 @@ export function rasterizeCanvasRenderer(
   );
   const context = canvas.getContext("2d");
   const pageBackground = options.pageBackground ?? "#ffffff";
-  const renderer = createCanvasRenderer(nativeCanvasSurface(context), {
+  const renderer = Canvas(nativeCanvasSurface(context), {
     pageGap,
     pageBackground,
     extensions: options.extensions,
@@ -446,7 +446,7 @@ export function writeRendererComparisonIndex(dir: string): string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Vasa Renderer Comparison</title>
+  <title>Skriva Renderer Comparison</title>
   <style>
     :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #111827; background: #f3f4f6; }
     body { margin: 0; }
@@ -469,7 +469,7 @@ export function writeRendererComparisonIndex(dir: string): string {
 </head>
 <body>
   <main>
-    <h1>Vasa Renderer Comparison</h1>
+    <h1>Skriva Renderer Comparison</h1>
     ${rows || "<p>No renderer comparison reports found.</p>"}
   </main>
 </body>
@@ -488,7 +488,7 @@ function resolveRendererComparisonArtifactOptions(
   if (typeof options === "string") return { dir: options };
   if (options !== undefined) return options;
 
-  const root = process.env.VASA_RENDER_TEST_ARTIFACTS;
+  const root = process.env.SKRIVA_RENDER_TEST_ARTIFACTS;
   if (root === undefined || root.length === 0) return undefined;
 
   rendererComparisonArtifactIndex += 1;

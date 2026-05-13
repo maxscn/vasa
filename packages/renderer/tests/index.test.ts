@@ -1,5 +1,5 @@
 import { expect, test } from "vite-plus/test";
-import type { LayoutBox, LayoutResult } from "@vasa/layout";
+import type { LayoutBox, LayoutResult } from "@skriva/layout";
 import { readFileSync } from "node:fs";
 import {
   createTextLineOutline,

@@ -7,11 +7,23 @@
     "paths": {
       "#/*": ["./src/*"],
       "@/*": ["./src/*"],
-      "@vasa/editor": ["../../packages/editor/src/index.ts"],
-      "@vasa/extension-line-height": ["../../packages/extension-line-height/src/index.ts"],
-      "@vasa/font": ["../../packages/font/src/index.ts"],
-      "@vasa/pdf": ["../../packages/pdf/src/index.ts"],
-      "@vasa/*": ["../../packages/*/dist/index.d.mts"]
+      "@opeinspection/skriva": ["../../packages/editor/src/index.ts"],
+      "@opeinspection/skriva/canvas": ["../../packages/editor/canvas.ts"],
+      "@opeinspection/skriva/enrichment": ["../../packages/editor/enrichment.ts"],
+      "@opeinspection/skriva/enrichments/horizontal-rule": [
+        "../../packages/editor/enrichments/horizontal-rule.ts"
+      ],
+      "@opeinspection/skriva/enrichments/line-height": [
+        "../../packages/editor/enrichments/line-height.ts"
+      ],
+      "@opeinspection/skriva/enrichments/svg": ["../../packages/editor/enrichments/svg.ts"],
+      "@opeinspection/skriva/enrichments/table": ["../../packages/editor/enrichments/table.ts"],
+      "@opeinspection/skriva/font": ["../../packages/editor/font.ts"],
+      "@opeinspection/skriva/headless": ["../../packages/editor/headless.ts"],
+      "@opeinspection/skriva/layout": ["../../packages/editor/layout.ts"],
+      "@opeinspection/skriva/pdf": ["../../packages/editor/pdf.ts"],
+      "@opeinspection/skriva/react": ["../../packages/editor/react.ts"],
+      "@opeinspection/skriva/renderer": ["../../packages/editor/renderer.ts"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],

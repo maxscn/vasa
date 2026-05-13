@@ -1,6 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { scrollEditorCanvasToPage, selectedRenderPageIndex } from "@vasa/editor";
+import { scrollEditorCanvasToPage, selectedRenderPageIndex } from "@opeinspection/skriva";
 import { useEditorShell } from "./editor-shell-context";
 import { PageThumb } from "./page-thumb";
 

@@ -1,4 +1,5 @@
-import type { VasaFont } from "@vasa/font";
+import type { FontCatalog, SkrivaFont } from "@skriva/font";
+import { createFontCatalog } from "@skriva/font";
 import {
   layoutDocument,
   type AnyLayoutExtension,
@@ -7,9 +8,10 @@ import {
   type LayoutOptions,
   type TextMeasurer,
   type TextStyle,
-} from "@vasa/layout";
+} from "@skriva/layout";
 import type { EditorMarkExtension, EditorTextStyleAttributes } from "./font-attributes.ts";
-import { createEditorLayoutTree, type EditorJson } from "./index.ts";
+import { createEditorLayoutTree } from "./layout-tree.ts";
+import type { JSONContent } from "@skriva/core";
 import {
   createEditorRenderTextStyle,
   createEditorTextStyleResolver,
@@ -41,7 +43,7 @@ export {
 } from "./style-resolver.ts";
 
 export type CreateEditorRenderDocumentOptions<TRenderDocument, TRendererExtension = unknown> = {
-  doc: EditorJson;
+  doc: JSONContent;
   page: LayoutOptions["page"];
   measurer: TextMeasurer;
   profile: EditorRenderProfileOptions;
@@ -51,6 +53,7 @@ export type CreateEditorRenderDocumentOptions<TRenderDocument, TRendererExtensio
   layoutExtensions?: AnyLayoutExtension[];
   markExtensions?: EditorMarkExtension[];
   rendererExtensions?: TRendererExtension[];
+  textGrid?: boolean;
   createRenderDocument: (
     layout: ReturnType<typeof layoutDocument>,
     options: { extensions?: TRendererExtension[] },
@@ -68,7 +71,15 @@ export type EditorRenderDocumentContract<TRenderDocument> = {
   ) => EditorPdfOutlineText | undefined;
 };
 
+const defaultFontCatalogCache = new WeakMap<EditorRenderProfileOptions, FontCatalog>();
+
 export function createEditorRenderDocument<TRenderDocument, TRendererExtension = unknown>(
+  options: CreateEditorRenderDocumentOptions<TRenderDocument, TRendererExtension>,
+): EditorRenderDocumentContract<TRenderDocument> {
+  return createEditorRenderPipeline(options);
+}
+
+export function createEditorRenderPipeline<TRenderDocument, TRendererExtension = unknown>(
   options: CreateEditorRenderDocumentOptions<TRenderDocument, TRendererExtension>,
 ): EditorRenderDocumentContract<TRenderDocument> {
   const textStyle = createEditorRenderTextStyle(options.profile);
@@ -92,7 +103,7 @@ export function createEditorRenderDocument<TRenderDocument, TRendererExtension =
     page: options.page,
     measurer: options.measurer,
     extensions: options.layoutExtensions,
-    textGrid: false,
+    textGrid: options.textGrid ?? false,
   } as LayoutOptions & { textGrid: boolean });
   const renderDocument = options.createRenderDocument(layout, {
     extensions: options.rendererExtensions,
@@ -112,7 +123,7 @@ export function createEditorRenderResolveTextStyle(options: EditorRenderProfileO
 }
 
 export function createEditorCanvasTextPaint(
-  doc: EditorJson,
+  doc: JSONContent,
   options: EditorRenderProfileOptions,
   box: EditorTextBoxSource,
   lineIndex: number,
@@ -123,7 +134,7 @@ export function createEditorCanvasTextPaint(
 }
 
 export function createEditorPdfOutlineText(
-  doc: EditorJson,
+  doc: JSONContent,
   options: EditorRenderProfileOptions,
   node: EditorRenderTextNodeSource,
   lineIndex: number,
@@ -134,7 +145,7 @@ export function createEditorPdfOutlineText(
 }
 
 export function textStyleAttrsForSourceId(
-  doc: EditorJson,
+  doc: JSONContent,
   sourceId: string | undefined,
 ): EditorTextStyleAttributes {
   return resolveTextStyleAttrsForSourceId(doc, sourceId);
@@ -232,21 +243,36 @@ function fontById(options: EditorRenderProfileOptions, fontId: string) {
 function fontForCssFont(options: EditorRenderProfileOptions, font: string | undefined) {
   const style = parseCssFontStyle(font);
   const weight = parseCssFontWeight(font);
-  const familyMatches = cssFontFamilies(font).flatMap((family) =>
-    options.fonts.filter((candidate) => normalizeCssFontFamily(candidate.family) === family),
-  );
+  const catalog = editorFontCatalog(options);
 
-  return (
-    familyMatches.find(
-      (candidate) =>
-        (style === undefined || candidate.style === style) &&
-        (weight === undefined || candidate.weight === weight),
-    ) ??
-    familyMatches.find((candidate) => weight !== undefined && candidate.weight === weight) ??
-    familyMatches.find((candidate) => style !== undefined && candidate.style === style) ??
-    familyMatches[0] ??
-    editorRenderDefaultFont(options)
-  );
+  for (const family of cssFontFamilies(font)) {
+    const registeredFamily = options.fonts.find(
+      (candidate) => normalizeCssFontFamily(candidate.family) === family,
+    )?.family;
+    if (registeredFamily === undefined) continue;
+
+    return catalog.resolveFace({
+      family: registeredFamily,
+      weight: weight ?? "400",
+      style: style ?? "normal",
+    });
+  }
+
+  return editorRenderDefaultFont(options);
+}
+
+function editorFontCatalog(options: EditorRenderProfileOptions) {
+  if (options.fontCatalog !== undefined) return options.fontCatalog;
+
+  const cached = defaultFontCatalogCache.get(options);
+  if (cached !== undefined) return cached;
+
+  const catalog = createFontCatalog({
+    fonts: options.fonts,
+    controlledFamilies: [],
+  });
+  defaultFontCatalogCache.set(options, catalog);
+  return catalog;
 }
 
 function cssFontFamilies(font: string | undefined) {
@@ -309,7 +335,7 @@ function normalizeCssFontFamily(family: string) {
 }
 
 function measureOutlineText(
-  font: NonNullable<VasaFont["outlineFont"]>,
+  font: NonNullable<SkrivaFont["outlineFont"]>,
   text: string,
   fontSize: number,
   includeRightOverhang = false,
@@ -327,7 +353,7 @@ function measureOutlineText(
   return includeRightOverhang ? Math.max(advance, inkRight) : advance;
 }
 
-type OutlineFont = NonNullable<VasaFont["outlineFont"]>;
+type OutlineFont = NonNullable<SkrivaFont["outlineFont"]>;
 type OutlinePathCommand = ReturnType<
   ReturnType<OutlineFont["source"]["charToGlyph"]>["getPath"]
 >["commands"][number];

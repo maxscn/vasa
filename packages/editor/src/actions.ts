@@ -1,13 +1,7 @@
-import {
-  deleteBackward,
-  deleteForward,
-  getSelectedText,
-  getTextAtPath,
-  type EditorJson,
-  type EditorSelection,
-  type EditorSelectionPoint,
-} from "./index.ts";
+import { type JSONContent, type EditorSelection, type EditorSelectionPoint } from "./model.ts";
 import { deleteLeft, deleteRange, deleteRight } from "./primitives.ts";
+import { getSelectedText, getTextAtPath } from "./selection.ts";
+import { deleteBackward, deleteForward } from "./transforms.ts";
 import { isWordSeparator } from "./word.ts";
 
 export type EditorTextLine = {
@@ -43,7 +37,7 @@ export function extendSelection(
   return createSelection(focus, currentSelection.anchor ?? currentSelection);
 }
 
-export function selectWordAtPoint(doc: EditorJson, point: EditorSelectionPoint): EditorSelection {
+export function selectWordAtPoint(doc: JSONContent, point: EditorSelectionPoint): EditorSelection {
   const range = wordRangeAtPoint(doc, point);
   return range === undefined ? point : createSelection(range.end, range.start);
 }
@@ -60,19 +54,19 @@ export function selectLineAtPoint(
   );
 }
 
-export function selectAllDocument(doc: EditorJson): EditorSelection {
+export function selectAllDocument(doc: JSONContent): EditorSelection {
   return createSelection(lastTextPoint(doc), firstTextPoint(doc));
 }
 
 export function deleteByGranularity(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   options: {
     direction: EditorDeleteDirection;
     granularity: EditorDeleteGranularity;
     line?: EditorTextLine | undefined;
   },
-): { doc: EditorJson; selection: EditorSelection } {
+): { doc: JSONContent; selection: EditorSelection } {
   if (isSelectionExpanded(selection)) return deleteBackward(doc, selection);
 
   if (options.granularity === "line") {
@@ -89,7 +83,7 @@ export function deleteByGranularity(
 }
 
 export function trimTrailingInlineWhitespaceSelection(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
 ): EditorSelection {
   const selectedText = getSelectedText(doc, selection);
@@ -138,7 +132,7 @@ export function compareSelectionPaths(left: number[], right: number[]) {
 }
 
 function deleteLineContents(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   line: EditorTextLine | undefined,
 ) {
@@ -149,7 +143,7 @@ function deleteLineContents(
 }
 
 function deleteAdjacentWord(
-  doc: EditorJson,
+  doc: JSONContent,
   selection: EditorSelection,
   direction: EditorDeleteDirection,
 ) {
@@ -201,7 +195,7 @@ function nextWordRange(path: number[], text: string, offset: number) {
   return end === start ? undefined : { start: { path, offset: start }, end: { path, offset: end } };
 }
 
-function wordRangeAtPoint(doc: EditorJson, point: EditorSelectionPoint) {
+function wordRangeAtPoint(doc: JSONContent, point: EditorSelectionPoint) {
   const text = getTextAtPath(doc, point.path);
   if (text.length === 0) return undefined;
 
@@ -228,17 +222,17 @@ function wordRangeContainingOffset(path: number[], text: string, offset: number)
   };
 }
 
-function firstTextPoint(doc: EditorJson): EditorSelectionPoint {
+function firstTextPoint(doc: JSONContent): EditorSelectionPoint {
   return firstTextPath(doc) ?? { path: [0, 0], offset: 0 };
 }
 
-function lastTextPoint(doc: EditorJson): EditorSelectionPoint {
+function lastTextPoint(doc: JSONContent): EditorSelectionPoint {
   const path = lastTextPath(doc) ?? [0, 0];
   return { path, offset: getTextAtPath(doc, path).length };
 }
 
 function firstTextPath(
-  node: EditorJson | undefined,
+  node: JSONContent | undefined,
   path: number[] = [],
 ): EditorSelectionPoint | undefined {
   if (node?.type === "text") return { path, offset: 0 };
@@ -251,7 +245,7 @@ function firstTextPath(
   return undefined;
 }
 
-function lastTextPath(node: EditorJson | undefined, path: number[] = []): number[] | undefined {
+function lastTextPath(node: JSONContent | undefined, path: number[] = []): number[] | undefined {
   if (node?.type === "text") return path;
 
   const content = node?.content ?? [];

@@ -1,9 +1,9 @@
 import {
   Mark,
   mergeExtensionRenderers,
-  type VasaExtension,
-  type VasaExtensionRenderers,
-} from "@vasa/core";
+  type SkrivaExtension,
+  type SkrivaExtensionRenderers,
+} from "@skriva/core";
 
 type CommandProps = {
   commands: Record<string, (...args: unknown[]) => boolean>;
@@ -14,7 +14,7 @@ export type SubscriptExtensionRenderers = {
 };
 
 export type SubscriptExtensionOptions = {
-  renderers?: VasaExtensionRenderers<SubscriptExtensionRenderers>;
+  renderers?: SkrivaExtensionRenderers<SubscriptExtensionRenderers>;
 };
 
 const defaultSubscriptRenderers = {
@@ -23,7 +23,7 @@ const defaultSubscriptRenderers = {
 
 export function createSubscriptExtension(
   options: SubscriptExtensionOptions = {},
-): VasaExtension<SubscriptExtensionRenderers> {
+): SkrivaExtension<SubscriptExtensionRenderers> {
   return {
     name: "subscript",
     tiptap: createSubscriptMark(),

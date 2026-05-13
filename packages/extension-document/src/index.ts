@@ -1,6 +1,6 @@
-import { Node, type VasaExtension } from "@vasa/core";
+import { Node, type SkrivaExtension } from "@skriva/core";
 
-export const Document: VasaExtension = {
+export const Document: SkrivaExtension = {
   name: "doc",
   tiptap: Node.create({
     name: "doc",

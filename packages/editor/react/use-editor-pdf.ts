@@ -1,32 +1,17 @@
-import { collectExtensionRenderers, collectLayoutExtensions, type VasaExtension } from "@vasa/core";
-import type { BoxNode, LayoutOptions, TextMeasurer } from "@vasa/layout";
-import {
-  renderDocumentToPdf,
-  type PdfRenderResult,
-  type PdfMetadata,
-  type PdfOutlineTextResolver,
-  type PdfRendererExtension,
-} from "@vasa/pdf";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type PdfRenderResult, type PdfMetadata } from "@skriva/pdf";
+import { useEffect, useRef, useState } from "react";
 import {
   bytesToArrayBuffer,
   currentBrowserBitmapScale,
   rasterizePdfPreview,
 } from "../src/browser.ts";
+import type { SkrivaHeadlessRenderModel } from "../src/headless.ts";
 
 export type UseEditorPdfOptions = {
-  document: BoxNode;
-  page: LayoutOptions["page"];
-  measurer: TextMeasurer;
+  renderModel: SkrivaHeadlessRenderModel;
   pageGap: number;
   pdfWorkerUrl: string;
-  extensions?: Array<
-    VasaExtension<{
-      pdf: PdfRendererExtension;
-    }>
-  >;
   metadata?: PdfMetadata;
-  outlineText?: PdfOutlineTextResolver;
   defaultTextFill?: string;
   downloadTextMode?: "native" | "outline";
   downloadFileName?: string;
@@ -34,16 +19,12 @@ export type UseEditorPdfOptions = {
   previewBitmapScale?: number;
 };
 
-const EMPTY_EXTENSIONS: NonNullable<UseEditorPdfOptions["extensions"]> = [];
-
 export function useEditorPdf(options: UseEditorPdfOptions) {
   const pdfCanvasRef = useRef<HTMLCanvasElement>(null);
   const pdfPreviewJobRef = useRef<Promise<void>>(Promise.resolve());
-  const [pdfResult, setPdfResult] = useState<PdfRenderResult | undefined>(undefined);
+  const [pdfResult, setPdfResult] = useState<PdfRenderResult<unknown> | undefined>(undefined);
   const previewBitmapScale = usePdfPreviewBitmapScale(options.previewBitmapScale ?? 1);
-  const extensions = options.extensions ?? EMPTY_EXTENSIONS;
-  const pdfRenderers = useMemo(() => collectExtensionRenderers(extensions, "pdf"), [extensions]);
-  const layoutExtensions = useMemo(() => collectLayoutExtensions(extensions), [extensions]);
+  const renderModel = options.renderModel;
 
   useEffect(() => {
     const canvas = pdfCanvasRef.current;
@@ -58,16 +39,10 @@ export function useEditorPdf(options: UseEditorPdfOptions) {
         .catch(() => undefined)
         .then(async () => {
           if (!cancelled) {
-            const previewPdfResult = renderDocumentToPdf(options.document, {
-              page: options.page,
-              measurer: options.measurer,
-              textGrid: false,
-              extensions: layoutExtensions,
-              renderers: pdfRenderers,
+            const previewPdfResult = renderModel.renderPdf({
               metadata: options.metadata,
-              outlineText: options.outlineText,
               defaultTextFill: options.defaultTextFill,
-            } as Parameters<typeof renderDocumentToPdf>[1] & { textGrid: boolean });
+            });
             setPdfResult(previewPdfResult);
 
             await rasterizePdfPreview(
@@ -89,38 +64,26 @@ export function useEditorPdf(options: UseEditorPdfOptions) {
       window.clearTimeout(timeout);
     };
   }, [
-    layoutExtensions,
     options.defaultTextFill,
-    options.document,
-    options.measurer,
     options.metadata,
-    options.outlineText,
-    options.page,
     options.pageGap,
     options.pdfWorkerUrl,
     options.previewBitmapScale,
     options.previewDebounceMs,
-    pdfRenderers,
     previewBitmapScale,
+    renderModel,
   ]);
 
   async function renderPdf() {
     const useEmbeddedText =
-      options.downloadTextMode !== "native" && options.outlineText !== undefined;
-    const useOutlineText =
-      options.downloadTextMode === "outline" && options.outlineText !== undefined;
-    const pdfResult = renderDocumentToPdf(options.document, {
-      page: options.page,
-      measurer: options.measurer,
-      textGrid: false,
-      extensions: layoutExtensions,
-      renderers: pdfRenderers,
+      options.downloadTextMode !== "native" && renderModel.supportsPdfTextMode("embedded");
+    const useOutlineText = options.downloadTextMode === "outline";
+    const pdfResult = renderModel.renderPdf({
       metadata: options.metadata,
       defaultTextFill: options.defaultTextFill,
-      outlineText: useEmbeddedText || useOutlineText ? options.outlineText : undefined,
       textMode: useEmbeddedText && !useOutlineText ? "embedded" : undefined,
       selectableText: useOutlineText,
-    } as Parameters<typeof renderDocumentToPdf>[1] & { textGrid: boolean });
+    });
     setPdfResult(pdfResult);
 
     const bytes = bytesToArrayBuffer(await pdfResult.compressedBytes());
@@ -128,7 +91,7 @@ export function useEditorPdf(options: UseEditorPdfOptions) {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = options.downloadFileName ?? "vasa-editor.pdf";
+    anchor.download = options.downloadFileName ?? "skriva-editor.pdf";
     anchor.click();
     URL.revokeObjectURL(url);
   }

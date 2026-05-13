@@ -1,7 +1,7 @@
 {
-  "name": "@vasa/extension-horizontal-rule",
+  "name": "@skriva/extension-horizontal-rule",
   "version": "0.0.0",
-  "description": "Horizontal rule node extension for Vasa.",
+  "description": "Horizontal rule node extension for Skriva.",
   "license": "MIT",
   "files": [
     "dist"
@@ -22,15 +22,15 @@
     "prepublishOnly": "vp run build"
   },
   "dependencies": {
-    "@vasa/canvas": "workspace:*",
-    "@vasa/core": "workspace:*",
-    "@vasa/layout": "workspace:*",
-    "@vasa/pdf": "workspace:*"
+    "@skriva/canvas": "workspace:*",
+    "@skriva/core": "workspace:*",
+    "@skriva/layout": "workspace:*",
+    "@skriva/pdf": "workspace:*"
   },
   "devDependencies": {
+    "@skriva/renderer": "workspace:*",
     "@types/node": "^25.5.0",
     "@typescript/native-preview": "7.0.0-dev.20260328.1",
-    "@vasa/renderer": "workspace:*",
     "typescript": "^6.0.2",
     "vite-plus": "^0.1.14"
   }
