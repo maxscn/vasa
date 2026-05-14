@@ -16,6 +16,10 @@ const config = defineConfig({
     tsconfigPaths: true,
     alias: [
       {
+        find: /^@skriva\/([^/]+)$/,
+        replacement: path.join(workspaceRoot, "packages/$1/src/index.ts"),
+      },
+      {
         find: /^@opeinspection\/skriva\/headless$/,
         replacement: path.join(workspaceRoot, "packages/editor/headless.ts"),
       },
