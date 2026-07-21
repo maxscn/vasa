@@ -1,8 +1,8 @@
-import { type CanvasSurface } from "@opeinspection/skriva/canvas";
+import { type CanvasSurface } from "@openinspection/skriva/canvas";
 import {
   createSkrivaHeadlessRenderModel,
   inspectSkrivaHeadlessRenderModel,
-} from "@opeinspection/skriva/headless";
+} from "@openinspection/skriva/headless";
 import {
   applyEditorControllerAction,
   createSelection,
@@ -21,14 +21,14 @@ import {
   type EditorMarkSpec,
   type EditorSelection,
   type EditorSelectionPoint,
-} from "@opeinspection/skriva";
+} from "@openinspection/skriva/editor/react";
 import {
   createCanvasFontValue,
   createStandardFontMetrics,
   type SkrivaFont,
-} from "@opeinspection/skriva/font";
-import { type Rect, type TextMeasurer } from "@opeinspection/skriva/layout";
-import { type RenderDocument } from "@opeinspection/skriva/renderer";
+} from "@openinspection/skriva/font";
+import { type Rect, type TextMeasurer } from "@openinspection/skriva/layout";
+import { type RenderDocument } from "@openinspection/skriva/scene";
 import {
   ChevronDown,
   Columns2,

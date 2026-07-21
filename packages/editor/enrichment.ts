@@ -9,3 +9,11 @@ export {
   type SkrivaExtension,
   type SkrivaExtensionRenderers,
 } from "@skriva/core";
+export {
+  collectSkrivaExtensions,
+  collectSkrivaExtensionsFromTiptap,
+  createSkrivaTiptapExtension,
+  isSkrivaAwareTiptapExtension,
+  type SkrivaAwareTiptapExtension,
+  type SkrivaExtensionInput,
+} from "./src/public-extension.ts";

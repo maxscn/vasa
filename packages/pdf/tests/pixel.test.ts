@@ -8,7 +8,7 @@ import {
   type CanvasNode,
   type CanvasRendererExtension,
   type CanvasTextLineNode,
-} from "@opeinspection/skriva/canvas";
+} from "@openinspection/skriva/canvas";
 import {
   createEditorCanvasTextMeasurer,
   createEditorCanvasTextPaint,
@@ -22,9 +22,9 @@ import {
   createEditorTextStyleForFont,
   type EditorRenderDocumentContract,
   type JSONContent,
-} from "@opeinspection/skriva";
-import type { SkrivaExtension } from "@opeinspection/skriva/enrichment";
-import type { PdfRendererExtension } from "@opeinspection/skriva/pdf";
+} from "@openinspection/skriva/headless";
+import { collectSkrivaExtensions, type SkrivaExtension } from "@openinspection/skriva/enrichment";
+import type { PdfRendererExtension } from "@openinspection/skriva/pdf";
 import { editorConfig } from "../../../apps/editor/src/editor-demo.ts";
 import {
   createFontRegistry,
@@ -40,7 +40,7 @@ import {
   type LayoutResult,
   type Rect,
   type TextLine,
-} from "@opeinspection/skriva/layout";
+} from "@openinspection/skriva/layout";
 import {
   comparePdfAndCanvasRenderers,
   createNativeMeasureText,
@@ -59,7 +59,7 @@ import {
   textOutlinePathBounds,
   type RenderDocument,
   type RenderTextNode,
-} from "@opeinspection/skriva/renderer";
+} from "@skriva/renderer";
 import { expect, test } from "vite-plus/test";
 import { renderDocumentToPdf, writePdf, type PdfCommand } from "../src/index.ts";
 import { webEditorConfig } from "../../../apps/web/src/editor-config.ts";
@@ -342,7 +342,7 @@ test("keeps bold and 28px editor text visually aligned between canvas and PDF", 
       lineHeight: 20,
       whiteSpace: "pre-wrap",
     }),
-    resolveTextStyle: (attrs) => {
+    resolveTextStyle: (attrs: { fontSize?: number; fontWeight?: string }) => {
       const fontSize = attrs.fontSize ?? 16;
       const fontWeight = attrs.fontWeight ?? editorFont.weight;
       return createEditorTextStyleForFont(
@@ -436,7 +436,15 @@ test("keeps DOM-style Tiptap marks aligned between canvas and PDF", async () => 
       lineHeight: 20,
       whiteSpace: "pre-wrap",
     }),
-    resolveTextStyle: (attrs) => {
+    resolveTextStyle: (attrs: {
+      backgroundColor?: string;
+      color?: string;
+      fontSize?: number;
+      fontStyle?: "italic";
+      fontWeight?: string;
+      textDecorationLine?: "underline" | "line-through";
+      verticalAlign?: "sub" | "super";
+    }) => {
       const baseFontSize = attrs.fontSize ?? 16;
       const fontSize =
         attrs.verticalAlign === "sub" || attrs.verticalAlign === "super"
@@ -1302,7 +1310,7 @@ const appEditorFixtureExtensions: Array<
     canvas: CanvasRendererExtension;
     pdf: PdfRendererExtension;
   }>
-> = editorConfig.extensions ?? [];
+> = collectSkrivaExtensions(editorConfig.extensions);
 const appEditorFixtureLayoutExtensions = appEditorFixtureExtensions.flatMap((extension) =>
   asArray(extension.layout),
 );
@@ -1849,9 +1857,26 @@ function geistFixtureRenderProfile() {
       outlineFont: geistBoldOutlineFont,
     },
   };
+  const boldItalicFont = {
+    ...font,
+    id: "geist-700-italic",
+    weight: "700",
+    style: "italic",
+    outlineFont: geistBoldOutlineFont,
+    data: {
+      kind: "outline" as const,
+      bytes: geistBoldBytes,
+      metrics: {
+        ...createStandardFontMetrics({ family: "Geist" }),
+        unitsPerEm: geistBoldOutlineFont.unitsPerEm,
+        ascender: geistBoldOutlineFont.ascender,
+      },
+      outlineFont: geistBoldOutlineFont,
+    },
+  };
 
   return {
-    fonts: [font, boldFont],
+    fonts: [font, boldFont, boldItalicFont],
     defaultFontId: font.id,
     fallbackFont: font,
     fontSize: editorConfig.textFontSize,
@@ -1925,9 +1950,25 @@ function markedFixtureRenderProfile() {
       outlineFont,
     },
   };
+  const boldFont = {
+    ...font,
+    id: "liberation-sans-700",
+    weight: "700",
+  };
+  const italicFont = {
+    ...font,
+    id: "liberation-sans-italic",
+    style: "italic",
+  };
+  const boldItalicFont = {
+    ...font,
+    id: "liberation-sans-700-italic",
+    weight: "700",
+    style: "italic",
+  };
 
   return {
-    fonts: [font],
+    fonts: [font, boldFont, italicFont, boldItalicFont],
     defaultFontId: font.id,
     fallbackFont: font,
     fontSize: 20,

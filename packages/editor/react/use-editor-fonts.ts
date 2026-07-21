@@ -14,7 +14,7 @@ import {
   fontIdFromFamily,
   mergeFonts,
   registerEditorFonts,
-} from "../src/index.ts";
+} from "../src/internal.ts";
 
 export type UseEditorFontsOptions = {
   bundledFont: SkrivaFont;

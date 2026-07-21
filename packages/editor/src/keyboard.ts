@@ -94,7 +94,7 @@ export function isPrintableTextKey(event: EditorKeyboardEventLike) {
 }
 
 export function arrowMovementGranularity(event: EditorKeyboardEventLike) {
-  if (event.ctrlKey) return "line";
+  if (event.ctrlKey || event.metaKey) return "line";
   if (event.altKey) return "word";
   return "character";
 }
@@ -121,7 +121,7 @@ export function moveSelectionHorizontallyByKeyboard(
 }
 
 export function deleteGranularity(event: EditorKeyboardEventLike) {
-  if (event.ctrlKey) return "line";
+  if (event.ctrlKey || event.metaKey) return "line";
   if (event.altKey) return "word";
   return "character";
 }

@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import type { SkrivaEditorShellContextValue } from "@opeinspection/skriva/react";
+import type { SkrivaEditorShellContextValue } from "@openinspection/skriva/editor/react";
 import type { MarginPresetId, PagePresetId } from "./presets";
 
 export type EditorShellContextValue = SkrivaEditorShellContextValue & {

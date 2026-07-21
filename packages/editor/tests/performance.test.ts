@@ -21,7 +21,7 @@ import {
   type JSONContent,
   type EditorRenderProfileOptions,
   type EditorSelection,
-} from "../src/index.ts";
+} from "../src/internal.ts";
 
 const paragraphCount = 12;
 const wordsPerParagraph = 130;

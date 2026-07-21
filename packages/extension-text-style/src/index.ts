@@ -39,7 +39,7 @@ export type TextStyleExtensionOptions = {
 const defaultTextStyleRenderers = {
   textStyle: ({ mark }) => ({
     ...(typeof mark.attrs?.fontId === "string" ? { fontId: mark.attrs.fontId } : {}),
-    ...(typeof mark.attrs?.fontFamily === "string" ? { fontId: mark.attrs.fontFamily } : {}),
+    ...(typeof mark.attrs?.fontFamily === "string" ? { fontFamily: mark.attrs.fontFamily } : {}),
     ...(typeof mark.attrs?.fontSize === "number" ? { fontSize: mark.attrs.fontSize } : {}),
     ...(typeof mark.attrs?.lineHeight === "number" ? { lineHeight: mark.attrs.lineHeight } : {}),
     ...(typeof mark.attrs?.fontWeight === "string" ? { fontWeight: mark.attrs.fontWeight } : {}),
@@ -97,8 +97,7 @@ function createTextStyleMark() {
       return {
         fontId: {
           default: null,
-          parseHTML: (element) =>
-            element.getAttribute("data-font-id") || element.style.fontFamily || null,
+          parseHTML: (element) => element.getAttribute("data-font-id") || null,
           renderHTML: (attributes) => ({
             ...(attributes.fontId === null ? {} : { "data-font-id": String(attributes.fontId) }),
             ...(attributes.fontId === null

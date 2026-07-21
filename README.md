@@ -5,10 +5,17 @@ Skriva is a React-targeted, canvas/PDF-first visual representation layer for Tip
 The v1 direction is to render normal Tiptap editors through a small public API:
 
 ```tsx
-<SkrivaEditor editor={editor} enrichments={enrichments} />
+import { useEditor } from "@tiptap/react";
+import { Editor } from "@openinspection/skriva/editor/react";
+import { StarterKit } from "@openinspection/skriva/enrichments/starter";
+
+const extensions = [StarterKit];
+const editor = useEditor({ extensions });
+
+<Editor editor={editor} />;
 ```
 
-Skriva enrichments add visual coverage for Tiptap nodes and marks without changing Tiptap behavior. The layout engine is the source of truth for how a document should look, and native renderers such as canvas and PDF implement that output.
+Skriva-aware Tiptap extensions are normal Tiptap extensions with hidden Skriva visual/export metadata. Tiptap owns behavior; Skriva reads the metadata to add deterministic pagination, canvas rendering, and native PDF export.
 
 ## Documentation
 

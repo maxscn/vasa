@@ -7,23 +7,26 @@
     "paths": {
       "#/*": ["./src/*"],
       "@/*": ["./src/*"],
-      "@opeinspection/skriva": ["../../packages/editor/src/index.ts"],
-      "@opeinspection/skriva/canvas": ["../../packages/editor/canvas.ts"],
-      "@opeinspection/skriva/enrichment": ["../../packages/editor/enrichment.ts"],
-      "@opeinspection/skriva/enrichments/horizontal-rule": [
+      "@openinspection/skriva": ["../../packages/editor/src/index.ts"],
+      "@openinspection/skriva/canvas": ["../../packages/editor/canvas.ts"],
+      "@openinspection/skriva/enrichment": ["../../packages/editor/enrichment.ts"],
+      "@openinspection/skriva/enrichments/horizontal-rule": [
         "../../packages/editor/enrichments/horizontal-rule.ts"
       ],
-      "@opeinspection/skriva/enrichments/line-height": [
+      "@openinspection/skriva/enrichments/line-height": [
         "../../packages/editor/enrichments/line-height.ts"
       ],
-      "@opeinspection/skriva/enrichments/svg": ["../../packages/editor/enrichments/svg.ts"],
-      "@opeinspection/skriva/enrichments/table": ["../../packages/editor/enrichments/table.ts"],
-      "@opeinspection/skriva/font": ["../../packages/editor/font.ts"],
-      "@opeinspection/skriva/headless": ["../../packages/editor/headless.ts"],
-      "@opeinspection/skriva/layout": ["../../packages/editor/layout.ts"],
-      "@opeinspection/skriva/pdf": ["../../packages/editor/pdf.ts"],
-      "@opeinspection/skriva/react": ["../../packages/editor/react.ts"],
-      "@opeinspection/skriva/renderer": ["../../packages/editor/renderer.ts"]
+      "@openinspection/skriva/enrichments/starter": [
+        "../../packages/editor/enrichments/starter.ts"
+      ],
+      "@openinspection/skriva/enrichments/svg": ["../../packages/editor/enrichments/svg.ts"],
+      "@openinspection/skriva/enrichments/table": ["../../packages/editor/enrichments/table.ts"],
+      "@openinspection/skriva/editor/react": ["../../packages/editor/react.ts"],
+      "@openinspection/skriva/font": ["../../packages/editor/font.ts"],
+      "@openinspection/skriva/headless": ["../../packages/editor/headless.ts"],
+      "@openinspection/skriva/layout": ["../../packages/editor/layout.ts"],
+      "@openinspection/skriva/pdf": ["../../packages/editor/pdf.ts"],
+      "@openinspection/skriva/scene": ["../../packages/editor/scene.ts"]
     },
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "types": ["vite/client"],

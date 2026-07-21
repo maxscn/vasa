@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { googleFontManifest } from "@opeinspection/skriva/font";
+import { googleFontManifest } from "@openinspection/skriva/font";
 import {
   localArimoRegularFontSource,
   localControlledGoogleFontFamilies,

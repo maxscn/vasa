@@ -13,7 +13,7 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
-    "@opeinspection/skriva": "workspace:*",
+    "@openinspection/skriva": "workspace:*",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/history": "catalog:",
     "@tanstack/react-devtools": "latest",

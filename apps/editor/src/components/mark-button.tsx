@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { isToolbarMarkActive } from "@opeinspection/skriva";
+import { isToolbarMarkActive } from "@openinspection/skriva/editor/react";
 import { useEditorShell } from "./editor-shell-context";
 
 export function MarkButton({

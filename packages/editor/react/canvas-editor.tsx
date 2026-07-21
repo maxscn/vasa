@@ -1,6 +1,6 @@
 import { Edit3 } from "lucide-react";
 import type { ReactNode } from "react";
-import type { UseSkrivaEditorReturn } from "./use-editor.ts";
+import { useOptionalSkriva, type UseSkrivaEditorReturn } from "./use-editor.ts";
 import { useOptionalSkrivaEditorShell } from "./editor-shell-context.tsx";
 
 export type SkrivaCanvasEditorProps = {
@@ -15,9 +15,10 @@ export function SkrivaCanvasEditor({
   rail,
 }: SkrivaCanvasEditorProps) {
   const shell = useOptionalSkrivaEditorShell();
-  const editor = editorProp ?? shell?.editor;
+  const surface = useOptionalSkriva();
+  const editor = editorProp ?? surface ?? shell?.editor;
   if (editor === undefined) {
-    throw new Error("SkrivaCanvasEditor requires an editor prop or SkrivaEditorShellProvider.");
+    throw new Error("SkrivaCanvasEditor requires an editor prop or Editor context.");
   }
   const activeFont = editor.fonts.find((font) => font.id === editor.selectedFontId);
 

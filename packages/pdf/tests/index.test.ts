@@ -11,7 +11,7 @@ import { Scene, createCanvasCommands, type CanvasCommand } from "../../canvas/sr
 import {
   createEditorLayoutTree as createSourceEditorLayoutTree,
   type JSONContent,
-} from "../../editor/src/index.ts";
+} from "../../editor/src/internal.ts";
 import { layoutDocument as layoutSourceDocument } from "../../layout/src/index.ts";
 import { extractPdfText } from "../../render-test/src/index.ts";
 import {

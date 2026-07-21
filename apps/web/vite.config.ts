@@ -20,23 +20,23 @@ const config = defineConfig({
         replacement: path.join(workspaceRoot, "packages/$1/src/index.ts"),
       },
       {
-        find: /^@opeinspection\/skriva\/headless$/,
-        replacement: path.join(workspaceRoot, "packages/editor/headless.ts"),
-      },
-      {
-        find: /^@opeinspection\/skriva\/react$/,
+        find: /^@openinspection\/skriva\/editor\/react$/,
         replacement: path.join(workspaceRoot, "packages/editor/react.ts"),
       },
       {
-        find: /^@opeinspection\/skriva\/enrichments\/(.+)$/,
+        find: /^@openinspection\/skriva\/headless$/,
+        replacement: path.join(workspaceRoot, "packages/editor/headless.ts"),
+      },
+      {
+        find: /^@openinspection\/skriva\/enrichments\/(.+)$/,
         replacement: path.join(workspaceRoot, "packages/editor/enrichments/$1.ts"),
       },
       {
-        find: /^@opeinspection\/skriva\/(.+)$/,
+        find: /^@openinspection\/skriva\/(.+)$/,
         replacement: path.join(workspaceRoot, "packages/editor/$1.ts"),
       },
       {
-        find: /^@opeinspection\/skriva$/,
+        find: /^@openinspection\/skriva$/,
         replacement: path.join(workspaceRoot, "packages/editor/src/index.ts"),
       },
     ],

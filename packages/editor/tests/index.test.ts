@@ -16,8 +16,11 @@ import {
 } from "@skriva/layout";
 import { createRenderDocument, type TextOutlineFont } from "@skriva/renderer";
 import { GapCursor as ProseMirrorGapCursor } from "@tiptap/pm/gapcursor";
+import { history } from "@tiptap/pm/history";
+import { EditorState, TextSelection } from "prosemirror-state";
 import { expect, test } from "vite-plus/test";
 import { applyEditorKeymap, type EditorKeymapOptions } from "../react/keymap.ts";
+import { isNativeBrowserShortcut } from "../react/use-editor-input.ts";
 import {
   createBarebonesEditorExtensions,
   createEditorCanvasTextMeasurer,
@@ -66,6 +69,7 @@ import {
   parseEditorHtml,
   pointToEditorSelection,
   normalizeTiptapJson,
+  reduceHeadlessInteraction,
   runEditorCommand,
   selectAllDocument,
   selectLineAtPoint,
@@ -106,7 +110,8 @@ import {
   type JSONContent,
   type EditorRenderProfileOptions,
   type EditorRenderLineDocument,
-} from "../src/index.ts";
+  type HeadlessEditorState,
+} from "../src/internal.ts";
 
 const cursorRenderLineOptions = { pageHeight: 100 };
 
@@ -260,6 +265,351 @@ function outlineParityScene(doc: JSONContent) {
 
   return Scene(contract.renderDocument, { text: contract.canvasTextPaint });
 }
+
+function createHeadlessInteractionTestState(
+  content: JSONContent,
+  selection: { anchor: number; head: number },
+): HeadlessEditorState {
+  const font = testOutlineFont();
+  const profile = {
+    fonts: [font],
+    defaultFontId: font.id,
+    fallbackFont: font,
+    fontSize: 16,
+    lineHeight: 20,
+    textColor: "#111111",
+    whiteSpace: "pre-wrap" as const,
+    wordBreak: "normal" as const,
+  };
+  const schema = getSchema(
+    defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+  );
+  const doc = schema.nodeFromJSON(content);
+  const editorState = EditorState.create({
+    doc,
+    selection: TextSelection.create(doc, selection.anchor, selection.head),
+  });
+  const renderModel = createSkrivaHeadlessRenderModel({
+    document: content,
+    page: { width: 240, height: 240, margin: 20 },
+    profile,
+  });
+  const renderInspection = inspectSkrivaHeadlessRenderModel(renderModel);
+
+  return {
+    editorState,
+    visualContext: {
+      renderDocument: renderInspection.documentSceneGraph,
+      renderLineOptions: { pageHeight: 240 },
+    },
+    effects: [],
+  };
+}
+
+test("headless interaction state applies extension-owned bold shortcuts to Tiptap state", () => {
+  const state = createHeadlessInteractionTestState(editorDoc("Hello Text"), {
+    anchor: 7,
+    head: 11,
+  });
+  const next = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "b", metaKey: true },
+  });
+
+  expect(next.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(next.editorState.doc.toJSON()).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Hello " },
+          { type: "text", text: "Text", marks: [{ type: "bold" }] },
+        ],
+      },
+    ],
+  });
+});
+
+test("headless interaction state applies extension-owned underline shortcuts to Tiptap state", () => {
+  const state = createHeadlessInteractionTestState(editorDoc("Hello Text"), {
+    anchor: 7,
+    head: 11,
+  });
+  const next = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "u", metaKey: true, shiftKey: true },
+  });
+
+  expect(next.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(next.editorState.doc.toJSON()).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Hello " },
+          { type: "text", text: "Text", marks: [{ type: "underline" }] },
+        ],
+      },
+    ],
+  });
+});
+
+test("headless interaction state applies undo and redo through ProseMirror history", () => {
+  const state = createHeadlessInteractionTestState(editorDoc("Hello"), {
+    anchor: 6,
+    head: 6,
+  });
+  const editorStateWithHistory = EditorState.create({
+    doc: state.editorState.doc,
+    selection: state.editorState.selection,
+    plugins: [history()],
+  });
+  const editedEditorState = editorStateWithHistory.apply(
+    editorStateWithHistory.tr.insertText("!", 6),
+  );
+  const editedState = { ...state, editorState: editedEditorState };
+  const undone = reduceHeadlessInteraction(editedState, {
+    type: "keyboard",
+    combo: { key: "z", ctrlKey: true },
+  });
+  const redone = reduceHeadlessInteraction(undone, {
+    type: "keyboard",
+    combo: { key: "z", ctrlKey: true, shiftKey: true },
+  });
+
+  expect(undone.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(undone.editorState.doc.textContent).toBe("Hello");
+  expect(redone.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(redone.editorState.doc.textContent).toBe("Hello!");
+});
+
+test("headless interaction state selects the whole Tiptap document", () => {
+  const state = createHeadlessInteractionTestState(
+    {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [{ type: "text", text: "One" }],
+        },
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [{ type: "text", text: "Two" }],
+        },
+      ],
+    },
+    {
+      anchor: 2,
+      head: 2,
+    },
+  );
+  const next = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "a", ctrlKey: true },
+  });
+
+  expect(next.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(
+    next.editorState.doc.textBetween(
+      next.editorState.selection.from,
+      next.editorState.selection.to,
+      "\n",
+    ),
+  ).toBe("One\nTwo");
+  expect(proseMirrorSelectionToSurfaceSelection(next.editorState.selection)).toEqual({
+    path: [1, 0],
+    offset: 3,
+    anchor: { path: [0, 0], offset: 0 },
+  });
+});
+
+test("headless interaction state extends horizontal keyboard movement through Tiptap selection", () => {
+  const state = createHeadlessInteractionTestState(editorDoc("Hello Text"), {
+    anchor: 6,
+    head: 6,
+  });
+  const next = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "ArrowRight", ctrlKey: true, shiftKey: true },
+  });
+
+  expect(next.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(next.editorState.selection.anchor).toBe(6);
+  expect(next.editorState.selection.head).toBe(11);
+});
+
+test("headless interaction state supports macOS line-edge selection shortcuts", () => {
+  const state = createHeadlessInteractionTestState(editorDoc("Hello Text"), {
+    anchor: 6,
+    head: 6,
+  });
+  const next = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "ArrowRight", metaKey: true, shiftKey: true },
+  });
+
+  expect(next.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(next.editorState.selection.anchor).toBe(6);
+  expect(next.editorState.selection.head).toBe(11);
+});
+
+test("headless interaction state moves to document edges with vertical modifier shortcuts", () => {
+  const state = createHeadlessInteractionTestState(
+    {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [{ type: "text", text: "One" }],
+        },
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [{ type: "text", text: "Two" }],
+        },
+      ],
+    },
+    {
+      anchor: 3,
+      head: 3,
+    },
+  );
+  const start = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "ArrowUp", ctrlKey: true },
+  });
+  const end = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "ArrowDown", ctrlKey: true },
+  });
+
+  expect(start.editorState.selection.from).toBe(1);
+  expect(start.editorState.selection.empty).toBe(true);
+  expect(end.editorState.selection.from).toBe(9);
+  expect(end.editorState.selection.empty).toBe(true);
+});
+
+test("headless interaction state extends selection to document edges with vertical shift modifier shortcuts", () => {
+  const state = createHeadlessInteractionTestState(
+    {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [{ type: "text", text: "One" }],
+        },
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [{ type: "text", text: "Two" }],
+        },
+      ],
+    },
+    {
+      anchor: 3,
+      head: 3,
+    },
+  );
+  const start = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "ArrowUp", ctrlKey: true, shiftKey: true },
+  });
+  const end = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "ArrowDown", ctrlKey: true, shiftKey: true },
+  });
+
+  expect(start.editorState.selection.anchor).toBe(3);
+  expect(start.editorState.selection.head).toBe(1);
+  expect(
+    start.editorState.doc.textBetween(
+      start.editorState.selection.from,
+      start.editorState.selection.to,
+      "\n",
+    ),
+  ).toBe("On");
+  expect(end.editorState.selection.anchor).toBe(3);
+  expect(end.editorState.selection.head).toBe(9);
+  expect(
+    end.editorState.doc.textBetween(
+      end.editorState.selection.from,
+      end.editorState.selection.to,
+      "\n",
+    ),
+  ).toBe("e\nTwo");
+});
+
+test("headless interaction state deletes expanded selections in Tiptap state", () => {
+  const state = createHeadlessInteractionTestState(editorDoc("Hello Text"), {
+    anchor: 7,
+    head: 11,
+  });
+  const next = reduceHeadlessInteraction(state, {
+    type: "keyboard",
+    combo: { key: "Backspace" },
+  });
+
+  expect(next.effects.map((effect) => effect.type)).toEqual(["transaction"]);
+  expect(next.editorState.doc.toJSON()).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Hello " }],
+      },
+    ],
+  });
+});
+
+test("browser-owned shortcuts are not hijacked by editor input handling", () => {
+  expect(
+    isNativeBrowserShortcut({
+      key: "r",
+      ctrlKey: true,
+      metaKey: false,
+      altKey: false,
+      shiftKey: false,
+    }),
+  ).toBe(true);
+  expect(
+    isNativeBrowserShortcut({
+      key: "r",
+      ctrlKey: false,
+      metaKey: true,
+      altKey: false,
+      shiftKey: false,
+    }),
+  ).toBe(true);
+  expect(
+    isNativeBrowserShortcut({
+      key: "v",
+      ctrlKey: true,
+      metaKey: false,
+      altKey: false,
+      shiftKey: false,
+    }),
+  ).toBe(true);
+  expect(
+    isNativeBrowserShortcut({
+      key: "r",
+      ctrlKey: true,
+      metaKey: false,
+      altKey: false,
+      shiftKey: true,
+    }),
+  ).toBe(false);
+});
 
 test("maps Skriva surface points to ProseMirror text positions and back", () => {
   const schema = getSchema(createBarebonesEditorExtensions());
@@ -523,6 +873,652 @@ test("keeps the Tiptap caret editable after typing into a split paragraph", () =
     path: [1, 0],
     offset: 0,
   });
+  editor.destroy();
+});
+
+test("copies and pastes selected rich text with marks preserved", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [
+            { type: "text", text: "Plain " },
+            { type: "text", text: "Styled", marks: [{ type: "bold" }, { type: "underline" }] },
+          ],
+        },
+        {
+          type: "paragraph",
+          attrs: { pageSpacerHeight: null },
+          content: [{ type: "text", text: "Target" }],
+        },
+      ],
+    },
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+  const clipboard = new Map<string, string>();
+
+  expect(adapter.placeSelectionAt({ path: [0, 1], offset: 0 })).toBe(true);
+  expect(adapter.extendSelectionTo({ path: [0, 1], offset: "Styled".length })).toBe(true);
+  expect(adapter.copySelection({ setData: (type, value) => clipboard.set(type, value) })).toBe(
+    true,
+  );
+  expect(clipboard.get("text/plain")).toBe("Styled");
+  expect(clipboard.get("text/html")).toBe("<strong><u>Styled</u></strong>");
+
+  expect(adapter.placeSelectionAt({ path: [1, 0], offset: "Target".length })).toBe(true);
+  expect(adapter.pasteClipboard({ getData: (type) => clipboard.get(type) ?? "" })).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Plain " },
+          { type: "text", text: "Styled", marks: [{ type: "bold" }, { type: "underline" }] },
+        ],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Target" },
+          { type: "text", text: "Styled", marks: [{ type: "bold" }, { type: "underline" }] },
+        ],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes plain clipboard html with charset metadata as plain text", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? "<meta charset='utf-8'>asasfasfa"
+          : type === "text/plain"
+            ? "asasfasfa"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Targetasasfasfa" }],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes google-docs clipboard html through the Tiptap paste pipeline", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? `
+            <meta charset="utf-8">
+            <span style="font-weight: 700; text-decoration: underline; color: rgb(37, 99, 235);">Styled</span>
+          `
+          : type === "text/plain"
+            ? "Styled"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Target" },
+          {
+            type: "text",
+            text: "Styled",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  backgroundColor: null,
+                  code: null,
+                  color: "rgb(37, 99, 235)",
+                  fontFamily: null,
+                  fontId: null,
+                  fontSize: null,
+                  fontStyle: null,
+                  fontWeight: "700",
+                  lineHeight: null,
+                  textDecorationColor: null,
+                  textDecorationLine: "underline",
+                  verticalAlign: null,
+                },
+              },
+              { type: "bold" },
+              { type: "underline" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes google-docs wrapper html without making every paragraph bold", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? `<meta charset="utf-8"><b id="docs-internal-guid-1" style="font-weight: normal;"><p dir="ltr"><span style="font-size: 16px;">Plain title</span></p><p dir="ltr"><span style="font-size: 16px;">Plain paragraph with </span><span style="font-weight: 700;">bold</span></p></b>`
+          : type === "text/plain"
+            ? "Plain title\nPlain paragraph with bold"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Target" },
+          {
+            type: "text",
+            text: "Plain title",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  backgroundColor: null,
+                  code: null,
+                  color: null,
+                  fontFamily: null,
+                  fontId: null,
+                  fontSize: 16,
+                  fontStyle: null,
+                  fontWeight: null,
+                  lineHeight: null,
+                  textDecorationColor: null,
+                  textDecorationLine: null,
+                  verticalAlign: null,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          {
+            type: "text",
+            text: "Plain paragraph with ",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  backgroundColor: null,
+                  code: null,
+                  color: null,
+                  fontFamily: null,
+                  fontId: null,
+                  fontSize: 16,
+                  fontStyle: null,
+                  fontWeight: null,
+                  lineHeight: null,
+                  textDecorationColor: null,
+                  textDecorationLine: null,
+                  verticalAlign: null,
+                },
+              },
+            ],
+          },
+          {
+            type: "text",
+            text: "bold",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  backgroundColor: null,
+                  code: null,
+                  color: null,
+                  fontFamily: null,
+                  fontId: null,
+                  fontSize: null,
+                  fontStyle: null,
+                  fontWeight: "700",
+                  lineHeight: null,
+                  textDecorationColor: null,
+                  textDecorationLine: null,
+                  verticalAlign: null,
+                },
+              },
+              { type: "bold" },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes google-docs font families and empty paragraphs through the Tiptap paste pipeline", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? `<meta charset="utf-8"><p><span style="font-family: Arial; font-size: 16px;">First</span></p><p><span><br></span></p><p><span style="font-family: Arial; font-size: 16px;">Second</span></p>`
+          : type === "text/plain"
+            ? "First\n\nSecond"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Target" },
+          {
+            type: "text",
+            text: "First",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  backgroundColor: null,
+                  code: null,
+                  color: null,
+                  fontFamily: "Arial",
+                  fontId: null,
+                  fontSize: 16,
+                  fontStyle: null,
+                  fontWeight: null,
+                  lineHeight: null,
+                  textDecorationColor: null,
+                  textDecorationLine: null,
+                  verticalAlign: null,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          {
+            type: "text",
+            text: "Second",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  backgroundColor: null,
+                  code: null,
+                  color: null,
+                  fontFamily: "Arial",
+                  fontId: null,
+                  fontSize: 16,
+                  fontStyle: null,
+                  fontWeight: null,
+                  lineHeight: null,
+                  textDecorationColor: null,
+                  textDecorationLine: null,
+                  verticalAlign: null,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes google-docs standalone break separators as empty paragraphs", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? `<meta charset="utf-8"><p>First</p><br><p>Second</p>`
+          : type === "text/plain"
+            ? "First\n\nSecond"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "TargetFirst" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Second" }],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes google-docs code wrappers without leaking code marks to every paragraph", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? `<meta charset="utf-8"><code id="docs-internal-guid-code"><p><span>Plain title</span></p><p><span>Plain paragraph</span></p></code><p>Actual <code>inline code</code></p>`
+          : type === "text/plain"
+            ? "Plain title\nPlain paragraph\nActual inline code"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "TargetPlain title" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Plain paragraph" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Actual " },
+          { type: "text", text: "inline code", marks: [{ type: "code" }] },
+        ],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes google-docs block background wrappers without highlighting every paragraph", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? `<meta charset="utf-8"><span style="background-color: rgb(255, 242, 204);"><p>Plain title</p><p>Highlight <span style="background-color: rgb(255, 242, 204);">yellow note</span></p></span>`
+          : type === "text/plain"
+            ? "Plain title\nHighlight yellow note"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "TargetPlain title" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [
+          { type: "text", text: "Highlight " },
+          {
+            type: "text",
+            text: "yellow note",
+            marks: [
+              {
+                type: "textStyle",
+                attrs: {
+                  backgroundColor: "rgb(255, 242, 204)",
+                  code: null,
+                  color: null,
+                  fontFamily: null,
+                  fontId: null,
+                  fontSize: null,
+                  fontStyle: null,
+                  fontWeight: null,
+                  lineHeight: null,
+                  textDecorationColor: null,
+                  textDecorationLine: null,
+                  verticalAlign: null,
+                },
+              },
+              { type: "highlight", attrs: { color: null } },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("pastes google-docs dominant inline background without highlighting every paragraph", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Target"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: "Target".length })).toBe(true);
+  expect(
+    adapter.pasteClipboard({
+      getData: (type) =>
+        type === "text/html"
+          ? `<meta charset="utf-8"><p><span style="background-color: rgb(255, 242, 204);">Vasa editor parity sheet</span></p><p><span style="background-color: rgb(255, 242, 204);">Combined marks should stay glued together</span></p><p><span style="background-color: rgb(255, 242, 204);">Highlight, color, and code</span></p>`
+          : type === "text/plain"
+            ? "Vasa editor parity sheet\nCombined marks should stay glued together\nHighlight, color, and code"
+            : "",
+    }),
+  ).toBe(true);
+
+  expect(normalizeTiptapJson(editor.getJSON() as JSONContent)).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "TargetVasa editor parity sheet" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Combined marks should stay glued together" }],
+      },
+      {
+        type: "paragraph",
+        attrs: { pageSpacerHeight: null },
+        content: [{ type: "text", text: "Highlight, color, and code" }],
+      },
+    ],
+  });
+  editor.destroy();
+});
+
+test("does not write html clipboard data for plain inline selections", () => {
+  const editor = new Editor({
+    extensions: defaultEditorExtensions
+      .map((extension) => extension.tiptap)
+      .filter((extension) => extension !== undefined),
+    content: editorDoc("Plain"),
+  });
+  const adapter = createSkrivaSurfaceAdapter({
+    editor,
+    clipboard: createPlainTextClipboardAdapter(),
+    projectSelection: createProjectSurfaceSelection(editor),
+    projectWordSelection: createProjectSurfaceWordSelection(editor),
+    projectLineSelection: createProjectSurfaceLineSelection(editor),
+  });
+  const clipboard = new Map<string, string>();
+
+  expect(adapter.placeSelectionAt({ path: [0, 0], offset: 0 })).toBe(true);
+  expect(adapter.extendSelectionTo({ path: [0, 0], offset: "Plain".length })).toBe(true);
+  expect(adapter.copySelection({ setData: (type, value) => clipboard.set(type, value) })).toBe(
+    true,
+  );
+
+  expect(clipboard.get("text/plain")).toBe("Plain");
+  expect(clipboard.has("text/html")).toBe(false);
   editor.destroy();
 });
 
@@ -1066,6 +2062,28 @@ test("uses real bold font faces without faux outline emboldening", () => {
     font: boldOutline,
   });
   expect(pdfPaint).not.toHaveProperty("embolden");
+});
+
+test("resolves pasted CSS font families against registered editor fonts", () => {
+  const defaultFont = testOutlineFont();
+  const arial = testFont({
+    id: "arial-400",
+    family: "Arial",
+    displayName: "Arial",
+    cssFamily: "Arial, sans-serif",
+    weight: "400",
+  });
+  const profile: EditorRenderProfileOptions = {
+    fonts: [defaultFont, arial],
+    defaultFontId: defaultFont.id,
+    fallbackFont: defaultFont,
+    fontSize: 16,
+    lineHeight: 20,
+  };
+
+  expect(createEditorRenderResolveTextStyle(profile)({ fontFamily: "Arial" })).toMatchObject({
+    font: "normal 400 16px Arial, sans-serif",
+  });
 });
 
 test("uses the resolved font face metrics for strike geometry", () => {
@@ -4827,6 +5845,43 @@ test("parses google-docs-style clipboard html into editor formatting", () => {
               { type: "text", text: "content", marks: [{ type: "strike" }] },
             ],
           },
+        ],
+      },
+    ],
+  });
+});
+
+test("parses google-docs wrapper blocks without leaking bold to every paragraph", () => {
+  const parsed = parseEditorHtml(`
+    <meta charset="utf-8">
+    <b id="docs-internal-guid-1" style="font-weight: normal;">
+      <p dir="ltr"><span style="font-size: 16px;">Plain title</span></p>
+      <p dir="ltr"><span style="font-size: 16px;">Plain paragraph with </span><span style="font-weight: 700;">bold</span></p>
+    </b>
+  `);
+
+  expect(parsed).toEqual({
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "Plain title",
+            marks: [{ type: "textStyle", attrs: { fontSize: 16 } }],
+          },
+        ],
+      },
+      {
+        type: "paragraph",
+        content: [
+          {
+            type: "text",
+            text: "Plain paragraph with ",
+            marks: [{ type: "textStyle", attrs: { fontSize: 16 } }],
+          },
+          { type: "text", text: "bold", marks: [{ type: "bold" }] },
         ],
       },
     ],

@@ -1,5 +1,5 @@
 import { Canvas, type CanvasRendererExtension } from "@skriva/canvas";
-import { type Editor, type JSONContent, type SkrivaExtension } from "@skriva/core";
+import { type Editor, type JSONContent } from "@skriva/core";
 import {
   createCanvasFontValue,
   type FontDescriptor,
@@ -18,7 +18,9 @@ import type { PdfRendererExtension } from "@skriva/pdf";
 import { type RenderDocument } from "@skriva/renderer";
 import { useEditor as useTiptapEditor, type UseEditorOptions } from "@tiptap/react";
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -26,31 +28,44 @@ import {
   type DependencyList,
   type DragEvent,
 } from "react";
+import { domCanvasSurface } from "../src/browser.ts";
+import { editorCodeFontDescriptor } from "../src/font.ts";
+import { currentEditorTextStyleAttrs, defaultEditorExtensions } from "../src/font-attributes.ts";
+import {
+  createSkrivaHeadlessRenderModel,
+  inspectSkrivaHeadlessRenderModel,
+} from "../src/headless.ts";
+import {
+  reduceHeadlessInteraction,
+  type HeadlessEditorInteraction,
+} from "../src/headless-interaction.ts";
+import { paintEditorCaret, paintEditorSelection } from "../src/interaction.ts";
+import {
+  editorHeadingTextStyleAttrs,
+  pageBreakSpacerHeightForRemainingPage,
+} from "../src/layout-tree.ts";
+import type { EditorMarkSpec } from "../src/font-attributes.ts";
+import type { EditorSelection } from "../src/model.ts";
 import {
   createEditorRenderMeasureText,
   createEditorRenderTextMeasurer,
-  createSkrivaHeadlessRenderModel,
-  inspectSkrivaHeadlessRenderModel,
-  createSkrivaSurfaceAdapter,
+} from "../src/render-profile.ts";
+import { isSelectionExpanded } from "../src/actions.ts";
+import {
   createPlainTextClipboardAdapter,
   createProjectSurfaceLineSelection,
   createProjectSurfaceSelection,
   createProjectSurfaceWordSelection,
+  createSkrivaSurfaceAdapter,
   createTextareaBrowserInputAdapter,
   proseMirrorSelectionToSurfaceSelection,
-  currentEditorTextStyleAttrs,
-  currentTextBlockType,
-  defaultEditorExtensions,
-  editorHeadingTextStyleAttrs,
-  editorCodeFontDescriptor,
-  isSelectionExpanded,
-  paintEditorCaret,
-  paintEditorSelection,
-  type EditorMarkSpec,
-  type EditorSelection,
-  pageBreakSpacerHeightForRemainingPage,
-} from "../src/index.ts";
-import { domCanvasSurface } from "../src/browser.ts";
+} from "../src/surface/index.ts";
+import { currentTextBlockType } from "../src/transforms.ts";
+import {
+  collectSkrivaExtensions,
+  collectSkrivaExtensionsFromTiptap,
+  type SkrivaExtensionInput,
+} from "../src/public-extension.ts";
 import type { EditorKeymap } from "./keymap.ts";
 import { useEditorFonts } from "./use-editor-fonts.ts";
 import { useEditorInput, type UseEditorInputOptions } from "./use-editor-input.ts";
@@ -73,10 +88,12 @@ export type SkrivaEditorConfig = {
   lineHeightOptions?: number[];
   document?: JSONContent;
   extensions?: Array<
-    SkrivaExtension<{
-      canvas: CanvasRendererExtension;
-      pdf: PdfRendererExtension;
-    }>
+    SkrivaExtensionInput & {
+      renderers?: {
+        canvas?: CanvasRendererExtension | CanvasRendererExtension[];
+        pdf?: PdfRendererExtension | PdfRendererExtension[];
+      };
+    }
   >;
   extraChildren?: LayoutNode[];
   fontFamilies?: Array<string | FontDescriptor>;
@@ -113,8 +130,42 @@ export type SkrivaEditorSurfaceDropHandler = {
   ) => boolean | Promise<boolean>;
 };
 
+export type UseSkrivaOptions = {
+  editor: Editor | null;
+  config: SkrivaEditorConfig;
+};
+
+const SkrivaSurfaceContext = createContext<UseSkrivaReturn | undefined>(undefined);
+
+export const SkrivaSurfaceProvider = SkrivaSurfaceContext.Provider;
+
+export function useSkriva(options?: UseSkrivaOptions) {
+  if (options === undefined) {
+    const value = useContext(SkrivaSurfaceContext);
+    if (value === undefined) {
+      throw new Error("useSkriva must be used inside <Editor> or called with options.");
+    }
+    return value;
+  }
+
+  const initialEditorDocument = useMemo<JSONContent>(
+    () => options.config.document ?? createDefaultTiptapDocument(),
+    [options.config.document],
+  );
+
+  return useSkrivaSurface({
+    config: options.config,
+    initialEditorDocument,
+    tiptapEditor: options.editor,
+  });
+}
+
+export function useOptionalSkriva() {
+  return useContext(SkrivaSurfaceContext);
+}
+
 export function useSkrivaEditor({ config }: SkrivaEditorProps) {
-  const documentExtensions = config.extensions ?? [];
+  const documentExtensions = collectSkrivaExtensions(config.extensions);
   const initialEditorDocument = useMemo<JSONContent>(
     () => config.document ?? createDefaultTiptapDocument(),
     [config.document],
@@ -138,6 +189,30 @@ export function useSkrivaEditor({ config }: SkrivaEditorProps) {
     [config.tiptap, initialEditorDocument, tiptapExtensions],
   );
   const tiptapEditor = useTiptapEditor(tiptapOptions, config.tiptapDeps ?? []);
+
+  return useSkrivaSurface({
+    config,
+    initialEditorDocument,
+    tiptapEditor,
+  });
+}
+
+function useSkrivaSurface({
+  config,
+  initialEditorDocument,
+  tiptapEditor,
+}: {
+  config: SkrivaEditorConfig;
+  initialEditorDocument: JSONContent;
+  tiptapEditor: Editor | null;
+}) {
+  const documentExtensions = useMemo(
+    () =>
+      config.extensions === undefined
+        ? collectSkrivaExtensionsFromTiptap(tiptapEditor?.extensionManager.extensions)
+        : collectSkrivaExtensions(config.extensions),
+    [config.extensions, tiptapEditor?.extensionManager.extensions],
+  );
   const extraChildren = config.extraChildren ?? [];
   const pageBackground = config.pageBackground ?? "#fffdfa";
   const textColor = config.textColor ?? "#1f2937";
@@ -673,6 +748,29 @@ export function useSkrivaEditor({ config }: SkrivaEditorProps) {
     return Math.max(page.content.y, ...page.nodes.map(renderNodeBottomY));
   }
 
+  function reduceInputInteraction(interaction: HeadlessEditorInteraction) {
+    if (tiptapEditor === null) return false;
+
+    const next = reduceHeadlessInteraction(
+      {
+        editorState: tiptapEditor.state,
+        visualContext: {
+          renderDocument,
+          renderLineOptions: editorRenderLineOptions,
+        },
+        effects: [],
+      },
+      interaction,
+    );
+    const transaction = next.effects.find((effect) => effect.type === "transaction")?.transaction;
+    if (transaction === undefined) return false;
+
+    tiptapEditor.view.dispatch(transaction);
+    scheduleTiptapProjectionSync();
+    focusKeyboardBridge();
+    return true;
+  }
+
   const input = useEditorInput({
     editorDocument: editorDocument as UseEditorInputOptions["editorDocument"],
     keymap: config.keymap,
@@ -686,6 +784,7 @@ export function useSkrivaEditor({ config }: SkrivaEditorProps) {
     toggleBold: toggleSelectedBold,
     toggleMark: toggleSelectedMark,
     toggleBlockquote: toggleSelectedBlockquote,
+    reduceInteraction: reduceInputInteraction,
     setBlockType: (type, attrs = {}) => {
       if (type === "paragraph") {
         runTiptapCommand("setParagraph");
@@ -758,7 +857,8 @@ export function useSkrivaEditor({ config }: SkrivaEditorProps) {
   };
 }
 
-export type UseSkrivaEditorReturn = ReturnType<typeof useSkrivaEditor>;
+export type UseSkrivaReturn = ReturnType<typeof useSkrivaSurface>;
+export type UseSkrivaEditorReturn = UseSkrivaReturn;
 
 function surfaceDropHandlersCanDrop(
   handlers: SkrivaEditorSurfaceDropHandler[] | undefined,

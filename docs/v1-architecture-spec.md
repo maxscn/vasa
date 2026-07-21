@@ -12,21 +12,28 @@ Skriva v1 is a React-targeted visual representation layer for Tiptap state. Tipt
 
 ## Public React API
 
-The primary app-facing integration is imported from `@opeinspection/skriva/react` and accepts a Tiptap `Editor` instance:
+The primary app-facing integration is imported from `@openinspection/skriva/editor/react` and accepts a Tiptap `Editor` instance:
 
 ```tsx
-<SkrivaEditor editor={editor} enrichments={enrichments} />
+import { useEditor } from "@tiptap/react";
+import { Editor } from "@openinspection/skriva/editor/react";
+import { StarterKit } from "@openinspection/skriva/enrichments/starter";
+
+const extensions = [StarterKit];
+const editor = useEditor({ extensions });
+
+<Editor editor={editor} />;
 ```
 
 App developers should own Tiptap setup with `useEditor`. Skriva should not create a competing editor state or command runtime. Lower-level adapters may exist later, but the v1 happy path is React plus a Tiptap `Editor`.
 
-Skriva's React hooks and components should use `Skriva`-prefixed names, such as `useSkrivaEditor` and `<SkrivaEditor />`. Do not preserve a Skriva-owned `useEditor` alias for the legacy custom runtime; unqualified `useEditor` refers to Tiptap's hook in app code.
+The primary React component is exported as `Editor`. Do not preserve a Skriva-owned `useEditor` alias for the legacy custom runtime; unqualified `useEditor` refers to Tiptap's hook in app code.
 
-`<SkrivaEditor />` should infer Tiptap extensions and schema information from the live Tiptap `Editor`; React users should not pass a duplicate extension list. Headless and PDF APIs accept extensions directly because they do not require a live editor.
+`<Editor />` should read Tiptap document state from the live Tiptap `Editor`. When the live editor was configured with Skriva-aware Tiptap extensions, Skriva may infer visual/export coverage from their attached `.skriva` metadata. Apps may still pass an explicit `extensions` list to override or supplement inference.
 
-`<SkrivaEditor />` should require enrichments explicitly rather than auto-loading defaults, mirroring Tiptap's explicit extension composition model.
+`<Editor />` should not auto-load a hidden starter kit. The minimum React path may omit `extensions` only because the caller already passed Skriva-aware extensions to Tiptap.
 
-Skriva should diagnose mismatches between provided enrichments and the Tiptap extensions/schema present in the editor or headless input. For example, `skrivaStarterEnrichments()` should warn if matching StarterKit semantics are absent.
+Skriva should diagnose mismatches between provided extensions and the Tiptap extensions/schema present in the editor or headless input. For example, missing visual coverage for StarterKit document content should suggest `@openinspection/skriva/enrichments/starter`.
 
 Missing enrichment diagnostics should have two tiers:
 
@@ -43,48 +50,48 @@ The intended package structure should make the new architecture visible before i
 
 Proposed boundaries:
 
-- `@opeinspection/skriva`: the released developer-facing package and only supported app-facing API surface.
-- Headless subpath: public non-React projection, Render Model, diagnostics, and shared engine APIs exposed through `@opeinspection/skriva/headless`.
+- `@openinspection/skriva`: the released developer-facing package and only supported app-facing API surface.
+- Headless subpath: public non-React projection, Render Model, diagnostics, and shared engine APIs exposed through `@openinspection/skriva/headless`.
 - Internal core/render-model package: implementation boundary for Tiptap projection, Render Model, diagnostics, and shared types.
 - Style/layout/scene package: Skriva Style Engine, Layout Engine, Scene Kernel, and Document Scene Graph.
 - Canvas renderer package: first-party canvas editor renderer.
 - PDF renderer package: first-party native PDF renderer.
-- First-party enrichment subpath exports: Tiptap repository parity coverage exposed through `@opeinspection/skriva`.
+- First-party enrichment subpath exports: Tiptap repository parity coverage exposed through `@openinspection/skriva`.
 - Renderer conformance package: shared tests for native and external renderer implementors.
 
-The exact internal folder moves can happen incrementally, but new implementation should not deepen the legacy custom document authority. Internal packages may exist for development boundaries, but developers should consume Skriva through `@opeinspection/skriva`.
+The exact internal folder moves can happen incrementally, but new implementation should not deepen the legacy custom document authority. Internal packages may exist for development boundaries, but developers should consume Skriva through `@openinspection/skriva`.
 
-First-party enrichments should be available as tree-shakeable subpath exports from `@opeinspection/skriva`, for example:
+First-party enrichments should be available as tree-shakeable subpath exports from `@openinspection/skriva`, for example:
 
 ```ts
-import { SkrivaEditor } from "@opeinspection/skriva/react";
-import { skrivaStarterEnrichments } from "@opeinspection/skriva/enrichments/starter";
-import { tableEnrichment } from "@opeinspection/skriva/enrichments/table";
+import { Editor } from "@openinspection/skriva/editor/react";
+import { StarterKit } from "@openinspection/skriva/enrichments/starter";
+import { Table } from "@openinspection/skriva/enrichments/table";
 ```
 
-The root `@opeinspection/skriva` import should stay small and stable. Larger surfaces such as React integration, enrichment bundles, renderer APIs, and conformance utilities should use explicit subpath exports.
+The root `@openinspection/skriva` import should stay small and stable. Larger surfaces such as React integration, enrichment bundles, renderer APIs, and conformance utilities should use explicit subpath exports.
 
-The shared headless engine should be public through `@opeinspection/skriva/headless`; avoid using `core` as a public subpath for implementation internals.
+The shared headless engine should be public through `@openinspection/skriva/headless`; avoid using `core` as a public subpath for implementation internals.
 
-`@opeinspection/skriva/headless` should expose the shared pipeline that produces a Document Scene Graph from Tiptap document input, Tiptap extensions, enrichments, page config, fonts, and diagnostics configuration. React/canvas and PDF should consume this shared scene pipeline. The normal API should accept Tiptap extensions and derive what it needs from them; explicit schema input can exist only as an advanced escape hatch.
+`@openinspection/skriva/headless` should expose the shared pipeline that produces a Document Scene Graph from Tiptap document input, Tiptap extensions, enrichments, page config, fonts, and diagnostics configuration. React/canvas and PDF should consume this shared scene pipeline. The normal API should accept Tiptap extensions and derive what it needs from them; explicit schema input can exist only as an advanced escape hatch.
 
-The minimum renderer implementor contract should be public through `@opeinspection/skriva/renderer`; low-level renderer internals should remain private.
+The public scene graph contract should be available through `@openinspection/skriva/scene`; low-level renderer construction internals should remain private until a dedicated external renderer implementor API is ready.
 
-The enrichment authoring contract should be public through `@opeinspection/skriva/enrichment`.
+The enrichment authoring contract should be public through `@openinspection/skriva/enrichment`.
 
-The Skriva Style Engine contract should be public through `@opeinspection/skriva/style`. Enrichment APIs may re-export style conveniences, but the style subpath is canonical.
+The Skriva Style Engine contract should be public through `@openinspection/skriva/style`. Enrichment APIs may re-export style conveniences, but the style subpath is canonical.
 
-Document Scene Graph types and JSON fixture contracts should be public through `@opeinspection/skriva/scene`. Public scene types should not imply that all internal scene construction helpers are public.
+Document Scene Graph types and JSON fixture contracts should be public through `@openinspection/skriva/scene`. Public scene types should not imply that all internal scene construction helpers are public.
 
-Native PDF export should be public through `@opeinspection/skriva/pdf` and work in both server and client environments. It should use a shared headless model based on Tiptap document input plus Tiptap extensions, enrichments, page config, fonts, and renderer configuration, not a React component or live editor requirement. Like headless, PDF should accept Tiptap extensions directly and treat explicit schema input as an advanced escape hatch.
+Native PDF export should be public through `@openinspection/skriva/pdf` and work in both server and client environments. It should use a shared headless model based on Tiptap document input plus Tiptap extensions, enrichments, page config, fonts, and renderer configuration, not a React component or live editor requirement. Like headless, PDF should accept Tiptap extensions directly and treat explicit schema input as an advanced escape hatch.
 
-Renderer conformance utilities should be exposed through `@opeinspection/skriva/conformance`.
+Renderer conformance utilities should be exposed through `@openinspection/skriva/conformance`.
 
-Optional React devtools should be exposed through `@opeinspection/skriva/devtools`.
+Optional React devtools should be exposed through `@openinspection/skriva/devtools`.
 
-`@opeinspection/skriva/enrichments/starter` should mirror Tiptap `StarterKit`. Broader recommended bundles should use a different name.
+`@openinspection/skriva/enrichments/starter` should export `StarterKit`, a Skriva-aware Tiptap extension. Broader recommended bundles should use a different name.
 
-Individual first-party enrichment subpaths should follow Tiptap package names where practical, such as `@opeinspection/skriva/enrichments/bold`, `@opeinspection/skriva/enrichments/paragraph`, and `@opeinspection/skriva/enrichments/table`. Bundles should compose individual enrichments rather than introduce separate semantics.
+Individual first-party enrichment subpaths should follow Tiptap package names where practical, such as `@openinspection/skriva/enrichments/bold`, `@openinspection/skriva/enrichments/paragraph`, and `@openinspection/skriva/enrichments/table`. Bundles should compose individual enrichments rather than introduce separate semantics.
 
 ## Tiptap as Logic Layer
 
@@ -237,16 +244,15 @@ Default policy:
 
 Diagnostics should be based primarily on actual document content, with optional extension-level preflight hints.
 
-Missing-enrichment diagnostics should name the Tiptap package or schema name and suggest the matching `@opeinspection/skriva` subpath import when one exists.
+Missing-enrichment diagnostics should name the Tiptap package or schema name and suggest the matching `@openinspection/skriva` subpath import when one exists.
 
 `onDiagnostic` should fire once per stable issue by default, keyed by diagnostic code plus relevant Tiptap package, schema name, path, or feature identity. Diagnostics should not repeat on every render/projection pass.
 
 Example:
 
 ```tsx
-<SkrivaEditor
+<Editor
   editor={editor}
-  enrichments={enrichments}
   diagnosticPolicy="warn"
   onDiagnostic={(diagnostic) => {
     reportDiagnostic(diagnostic);
@@ -275,9 +281,9 @@ Missing native PDF coverage or a missing required Static PDF Alternative for doc
 Skriva should provide an optional React debug component inspired by TanStack Query Devtools:
 
 ```tsx
-import { SkrivaDevtools } from "@opeinspection/skriva/devtools"
+import { SkrivaDevtools } from "@openinspection/skriva/devtools"
 
-<SkrivaEditor editor={editor} enrichments={enrichments} />
+<Editor editor={editor} />
 <SkrivaDevtools editor={editor} />
 ```
 
@@ -285,7 +291,7 @@ Devtools should be optional and dev-oriented so production bundles do not need t
 
 `SkrivaDevtools` should auto-discover nearby Skriva editor context when available. Explicit props should remain available for tests and unusual app layouts.
 
-The underlying debug snapshot should come from `@opeinspection/skriva/headless`; React devtools should render that data rather than owning the debug model.
+The underlying debug snapshot should come from `@openinspection/skriva/headless`; React devtools should render that data rather than owning the debug model.
 
 Headless debug snapshots should be JSON-serializable so they can be used in tests, CI artifacts, server logs, and bug reports. Large assets should be referenced by stable IDs rather than embedded.
 

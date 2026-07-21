@@ -16,13 +16,13 @@ Docs are local at `node_modules/vite-plus/docs` or online at https://viteplus.de
 
 ## Learned User Preferences
 
-- Prefer formal/spec-based behavior and tests over visual guessing for text and font rendering issues.
+- Prefer formal/spec-based regression tests over visual guessing for text, font rendering, and inline mark boundary issues (e.g. bold/italic collisions).
 
 ## Learned Workspace Facts
 
-- `@opeinspection/skriva` is the intended tree-shakeable public package; other workspace packages are internal and the main package re-exports what `apps/web` needs.
-- PDF and canvas parity is a core rendering goal, best preserved through shared deterministic text layout and paint data.
-- Text styles that affect metrics or wrapping should resolve before layout/Pretext; canvas/PDF transforms should stay shared paint data or renderer fallbacks.
+- `@openinspection/skriva` is the intended tree-shakeable public package; other workspace packages are internal and the main package re-exports what `apps/web` needs.
+- PDF and canvas parity is a core rendering goal; use shared outline-aware inline measurement and paint data (including synthetic bold/italic), not per-target padding or browser measurement APIs.
+- Text mark styling belongs in `packages/editor` extensible stylesheet/style resolvers before layout/Pretext; metrics-affecting styles must not live only in canvas/PDF paint paths.
 - Font mark geometry should use font metadata such as `OS/2` and `post` tables when available for strikethrough, underline, subscript, superscript, and italic.
 - New page breaks in the editor/web should preserve the current font instead of resetting to the default.
 - Native editor behavior belongs in `packages/editor`: text style resolution, mark semantics, default DOM-like editing behavior, font/measurement policy, and canvas/PDF paint resolvers should be package defaults, not reimplemented per app. App packages such as `apps/web` should focus on actual UI composition, configuration, routing, and product-specific shell behavior.

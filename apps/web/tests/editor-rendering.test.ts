@@ -6,26 +6,30 @@ import {
   type CanvasRendererExtension,
   type CanvasSurface,
   type CanvasScene,
-} from "@opeinspection/skriva/canvas";
+} from "@openinspection/skriva/canvas";
 import {
   collectExtensionRenderers,
   collectLayoutExtensions,
   collectRendererExtensions,
-} from "@opeinspection/skriva/enrichment";
+  collectSkrivaExtensions,
+} from "@openinspection/skriva/enrichment";
 import {
   createEditorParityDocument,
   createEditorRenderDocument,
   createEditorRenderTextMeasurer,
   type JSONContent,
   type EditorRenderProfileOptions,
-} from "@opeinspection/skriva";
+} from "@openinspection/skriva/headless";
 import {
   createFontRegistry,
   createFontStrikeoutStyle,
   type FontDescriptor,
   type SkrivaFont,
-} from "@opeinspection/skriva/font";
-import { createRenderDocument, textOutlinePathBounds } from "@opeinspection/skriva/renderer";
+} from "@openinspection/skriva/font";
+import {
+  createRenderDocument,
+  textOutlinePathBounds,
+} from "../../../packages/renderer/src/index.ts";
 import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, expect, test } from "vite-plus/test";
 import { webEditorConfig } from "../src/editor-config.ts";
@@ -81,6 +85,7 @@ test("renders the web editor parity sheet with loaded outline font geometry", as
     whiteSpace: "pre-wrap",
     wordBreak: "normal",
   };
+  const extensions = collectSkrivaExtensions(webEditorConfig.extensions);
   const contract = createEditorRenderDocument({
     doc: createEditorParityDocument(),
     page: webEditorConfig.page,
@@ -89,16 +94,13 @@ test("renders the web editor parity sheet with loaded outline font geometry", as
     rootStyle: { gap: 14 },
     paragraphStyle: { flexDirection: "column" },
     extraChildren: webEditorConfig.extraChildren,
-    layoutExtensions: collectLayoutExtensions(webEditorConfig.extensions),
-    rendererExtensions: collectRendererExtensions(webEditorConfig.extensions),
+    layoutExtensions: collectLayoutExtensions(extensions),
+    rendererExtensions: collectRendererExtensions(extensions),
     createRenderDocument,
   });
   const scene = Scene(contract.renderDocument, {
     pageGap: webEditorConfig.pageGap,
-    extensions: collectExtensionRenderers(
-      webEditorConfig.extensions,
-      "canvas",
-    ) as CanvasRendererExtension[],
+    extensions: collectExtensionRenderers(extensions, "canvas") as CanvasRendererExtension[],
     text: contract.canvasTextPaint,
   });
   const lines = canvasTextLines(scene);
@@ -236,9 +238,7 @@ function googleFontCss(url: string) {
 
 async function fixtureFontBytes(family: string, fileName: string) {
   return new Uint8Array(
-    await readFile(
-      new URL(`../../editor/src/assets/fonts/google/${family}/${fileName}`, import.meta.url),
-    ),
+    await readFile(new URL(`../src/assets/fonts/google/${family}/${fileName}`, import.meta.url)),
   );
 }
 
@@ -301,6 +301,7 @@ function renderWebParityScene(
   profile: EditorRenderProfileOptions,
   doc = createEditorParityDocument(),
 ) {
+  const extensions = collectSkrivaExtensions(webEditorConfig.extensions);
   const contract = createEditorRenderDocument({
     doc,
     page: webEditorConfig.page,
@@ -309,17 +310,14 @@ function renderWebParityScene(
     rootStyle: { gap: 14 },
     paragraphStyle: { flexDirection: "column" },
     extraChildren: webEditorConfig.extraChildren,
-    layoutExtensions: collectLayoutExtensions(webEditorConfig.extensions),
-    rendererExtensions: collectRendererExtensions(webEditorConfig.extensions),
+    layoutExtensions: collectLayoutExtensions(extensions),
+    rendererExtensions: collectRendererExtensions(extensions),
     createRenderDocument,
   });
 
   return Scene(contract.renderDocument, {
     pageGap: webEditorConfig.pageGap,
-    extensions: collectExtensionRenderers(
-      webEditorConfig.extensions,
-      "canvas",
-    ) as CanvasRendererExtension[],
+    extensions: collectExtensionRenderers(extensions, "canvas") as CanvasRendererExtension[],
     text: contract.canvasTextPaint,
   });
 }

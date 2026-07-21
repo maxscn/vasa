@@ -7,6 +7,13 @@ export function getSelectedHtml(doc: JSONContent, selection: EditorSelection): s
   return content === undefined ? "" : serializeEditorHtml(content);
 }
 
+export function serializeEditorClipboardHtml(fragment: JSONContent): string {
+  const content = editorContentFromFragment(fragment);
+  return content.length === 1 && content[0]?.type === "paragraph"
+    ? serializeInlineHtml(content[0].content ?? [])
+    : content.map(serializeBlockHtml).join("");
+}
+
 export function serializeEditorHtml(fragment: JSONContent): string {
   return editorContentFromFragment(fragment).map(serializeBlockHtml).join("");
 }
@@ -107,6 +114,9 @@ function parseHtmlChildren(parent: ParentNode, marks: JSONContent["marks"]): JSO
     if (isHtmlBlockElement(child)) {
       flushLooseInline(blocks, looseInline);
       blocks.push(...parseHtmlBlock(child, childMarks));
+    } else if (hasHtmlBlockChildren(child)) {
+      flushLooseInline(blocks, looseInline);
+      blocks.push(...parseHtmlChildren(child, childMarks));
     } else {
       looseInline.push(...parseHtmlInlineChildren(child, childMarks));
     }
@@ -212,14 +222,28 @@ function marksForElement(
   const tag = element.tagName.toLowerCase();
   const style = element.style;
   const decoration = `${style.textDecoration} ${style.textDecorationLine}`;
+  const textStyle = textStyleAttrsForElement(element);
 
-  if (tag === "strong" || tag === "b" || isBoldFontWeight(style.fontWeight)) {
+  if (style.fontWeight.length > 0 && !isBoldFontWeight(style.fontWeight)) {
+    removeMark(marks, "bold");
+  } else if (tag === "strong" || tag === "b" || isBoldFontWeight(style.fontWeight)) {
     addMark(marks, { type: "bold" });
   }
-  if (tag === "em" || tag === "i" || style.fontStyle === "italic")
+  if (style.fontStyle.length > 0 && style.fontStyle !== "italic") {
+    removeMark(marks, "italic");
+  } else if (tag === "em" || tag === "i" || style.fontStyle === "italic") {
     addMark(marks, { type: "italic" });
-  if (tag === "u" || decoration.includes("underline")) addMark(marks, { type: "underline" });
-  if (tag === "s" || tag === "del" || tag === "strike" || decoration.includes("line-through")) {
+  }
+  if (decoration.includes("none")) {
+    removeMark(marks, "underline");
+    removeMark(marks, "strike");
+  } else if (tag === "u" || decoration.includes("underline")) {
+    addMark(marks, { type: "underline" });
+  }
+  if (
+    !decoration.includes("none") &&
+    (tag === "s" || tag === "del" || tag === "strike" || decoration.includes("line-through"))
+  ) {
     addMark(marks, { type: "strike" });
   }
   if (tag === "code") addMark(marks, { type: "code" });
@@ -231,7 +255,7 @@ function marksForElement(
       attrs: { color: style.backgroundColor || "#fef08a" },
     });
   }
-  if (style.color.length > 0) addMark(marks, { type: "textStyle", attrs: { color: style.color } });
+  if (Object.keys(textStyle).length > 0) addMark(marks, { type: "textStyle", attrs: textStyle });
 
   return marks;
 }
@@ -272,6 +296,29 @@ function addMark(
   if (!marks.some((candidate) => candidate.type === mark.type)) marks.push(mark);
 }
 
+function removeMark(marks: NonNullable<JSONContent["marks"]>, type: string) {
+  const index = marks.findIndex((mark) => mark.type === type);
+  if (index >= 0) marks.splice(index, 1);
+}
+
+function textStyleAttrsForElement(element: HTMLElement): Record<string, unknown> {
+  const attrs: Record<string, unknown> = {};
+  const style = element.style;
+  const fontSize = parseCssPxValue(style.fontSize);
+  const lineHeight = parseCssLineHeight(style.lineHeight);
+
+  if (element.dataset.fontId !== undefined) attrs.fontId = element.dataset.fontId;
+  if (style.fontFamily.length > 0) attrs.fontFamily = style.fontFamily;
+  if (fontSize !== undefined) attrs.fontSize = fontSize;
+  if (lineHeight !== undefined) attrs.lineHeight = lineHeight;
+  if (style.color.length > 0) attrs.color = style.color;
+  if (style.verticalAlign === "sub" || style.verticalAlign === "super") {
+    attrs.verticalAlign = style.verticalAlign;
+  }
+
+  return attrs;
+}
+
 function isHtmlBlockElement(element: HTMLElement) {
   const tag = element.tagName.toLowerCase();
   return (
@@ -288,6 +335,10 @@ function isHtmlBlockElement(element: HTMLElement) {
   );
 }
 
+function hasHtmlBlockChildren(element: HTMLElement) {
+  return Array.from(element.children).some((child) => isHtmlBlockElement(child as HTMLElement));
+}
+
 function isHeadingTag(tag: string) {
   return (
     tag === "h1" || tag === "h2" || tag === "h3" || tag === "h4" || tag === "h5" || tag === "h6"
@@ -298,6 +349,20 @@ function isBoldFontWeight(value: string) {
   if (value === "bold" || value === "bolder") return true;
   const numeric = Number.parseInt(value, 10);
   return Number.isFinite(numeric) && numeric >= 600;
+}
+
+function parseCssPxValue(value: string) {
+  if (!value.endsWith("px")) return undefined;
+  const numeric = Number.parseFloat(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function parseCssLineHeight(value: string) {
+  if (value.length === 0 || value === "normal") return undefined;
+  if (value.endsWith("px")) return parseCssPxValue(value);
+
+  const numeric = Number.parseFloat(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
 }
 
 function escapeHtml(value: string) {

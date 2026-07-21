@@ -1,18 +1,18 @@
-import { HorizontalRule } from "@opeinspection/skriva/enrichments/horizontal-rule";
-import { LineHeight } from "@opeinspection/skriva/enrichments/line-height";
-import { SvgExtension } from "@opeinspection/skriva/enrichments/svg";
-import { TableExtension } from "@opeinspection/skriva/enrichments/table";
-import type { SkrivaEditorConfig } from "@opeinspection/skriva";
+import { HorizontalRule } from "@openinspection/skriva/enrichments/horizontal-rule";
+import { LineHeight } from "@openinspection/skriva/enrichments/line-height";
+import { SvgExtension } from "@openinspection/skriva/enrichments/svg";
+import { TableExtension } from "@openinspection/skriva/enrichments/table";
+import type { SkrivaEditorConfig } from "@openinspection/skriva/editor/react";
 import {
   arimoFallbackFont,
   arimoRegularFont,
   type FontDescriptor,
-} from "@opeinspection/skriva/font";
+} from "@openinspection/skriva/font";
 import {
   localControlledGoogleFontFamilies,
   localArimoRegularFontSource,
   localGoogleFontDescriptors,
-} from "../../editor/src/editor-font-assets";
+} from "./editor-font-assets";
 
 const defaultFontFamilies = [
   systemFont("Arial", ["Helvetica", "sans-serif"]),

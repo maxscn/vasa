@@ -36,7 +36,7 @@
     "react-reconciler": "catalog:"
   },
   "devDependencies": {
-    "@opeinspection/skriva": "workspace:*",
+    "@openinspection/skriva": "workspace:*",
     "@skriva/canvas": "workspace:*",
     "@skriva/extension-svg": "workspace:*",
     "@skriva/render-test": "workspace:*",

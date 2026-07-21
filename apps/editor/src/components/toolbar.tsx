@@ -17,7 +17,7 @@ import {
   toggleSubscript,
   toggleSuperscript,
   toggleUnderline,
-} from "@opeinspection/skriva";
+} from "@openinspection/skriva/editor/react";
 import { useEditorShell } from "./editor-shell-context";
 import { MarkButton } from "./mark-button";
 import { SelectField } from "./select-field";

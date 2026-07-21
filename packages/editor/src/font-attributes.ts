@@ -20,10 +20,13 @@ import { TextStyleMark } from "@skriva/extension-text-style";
 import { Underline } from "@skriva/extension-underline";
 import type { SkrivaExtension } from "@skriva/core";
 import { GapCursor } from "./gap-cursor.ts";
+import { GoogleDocsPaste } from "./google-docs-paste.ts";
 import type { JSONContent, EditorSelection, EditorSelectionPoint } from "./model.ts";
+import { UndoRedo } from "./undo-redo.ts";
 
 export type EditorTextStyleAttributes = {
   fontId?: string;
+  fontFamily?: string;
   fontSize?: number;
   lineHeight?: number;
   fontWeight?: string;
@@ -115,6 +118,7 @@ export { Text } from "@skriva/extension-text";
 export { TextStyleMark } from "@skriva/extension-text-style";
 export { Underline } from "@skriva/extension-underline";
 export { GapCursor } from "./gap-cursor.ts";
+export { GoogleDocsPaste } from "./google-docs-paste.ts";
 
 export const defaultEditorMarkExtensions: EditorMarkExtension[] = [
   createEditorMarkExtension(TextStyleMark),
@@ -128,6 +132,8 @@ export const defaultEditorMarkExtensions: EditorMarkExtension[] = [
   createEditorMarkExtension(Subscript),
 ];
 export const defaultEditorExtensions: EditorExtension[] = [
+  createEditorExtension(UndoRedo),
+  createEditorExtension(GoogleDocsPaste),
   createEditorExtension(Document),
   createEditorExtension(GapCursor),
   createEditorExtension(Paragraph),

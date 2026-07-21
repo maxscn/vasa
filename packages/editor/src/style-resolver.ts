@@ -256,7 +256,9 @@ function createTextStylesheetContext(
   line?: EditorTextLineSource,
 ): EditorTextStylesheetContext {
   const font =
-    attrs.fontId === undefined ? editorRenderDefaultFont(options) : fontById(options, attrs.fontId);
+    attrs.fontId === undefined
+      ? (fontByFamily(options, attrs.fontFamily) ?? editorRenderDefaultFont(options))
+      : fontById(options, attrs.fontId);
   const fontSizeBase = line?.fontSize ?? attrs.fontSize ?? options.fontSize;
   const shouldScaleScript =
     line?.fontSize === undefined &&
@@ -354,6 +356,20 @@ function editorRenderDefaultFont(options: EditorRenderProfileOptions) {
 
 function fontById(options: EditorRenderProfileOptions, fontId: string) {
   return options.fonts.find((font) => font.id === fontId) ?? options.fallbackFont;
+}
+
+function fontByFamily(options: EditorRenderProfileOptions, fontFamily: string | undefined) {
+  if (fontFamily === undefined) return undefined;
+
+  const requested = normalizeCssFontFamily(fontFamily);
+  return options.fonts.find((font) => normalizeCssFontFamily(font.family) === requested);
+}
+
+function normalizeCssFontFamily(family: string) {
+  return family
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .toLowerCase();
 }
 
 function fontFaceForStyle(

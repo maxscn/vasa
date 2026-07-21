@@ -1,9 +1,13 @@
-import type { ResolvedBoxEdges } from "@opeinspection/skriva/layout";
-import { resolvePageMargin } from "@opeinspection/skriva/layout";
-import type { SkrivaEditorConfig } from "@opeinspection/skriva";
-import { SkrivaCanvasEditor, useSkrivaEditor, useEditorPdf } from "@opeinspection/skriva/react";
-import type { SvgNode } from "@opeinspection/skriva/enrichments/svg";
-import { createSvgDropHandler } from "@opeinspection/skriva/enrichments/svg";
+import type { ResolvedBoxEdges } from "@openinspection/skriva/layout";
+import { resolvePageMargin } from "@openinspection/skriva/layout";
+import {
+  SkrivaCanvasEditor,
+  type SkrivaEditorConfig,
+  useSkrivaEditor,
+  useEditorPdf,
+} from "@openinspection/skriva/editor/react";
+import type { SvgNode } from "@openinspection/skriva/enrichments/svg";
+import { createSvgDropHandler } from "@openinspection/skriva/enrichments/svg";
 import { useMemo, useState } from "react";
 import { EditorShellProvider } from "./components/editor-shell-context";
 import { Inspector } from "./components/inspector";

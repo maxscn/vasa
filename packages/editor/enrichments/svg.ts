@@ -1,7 +1,27 @@
-export * from "@skriva/extension-svg";
-
-import { readSvgFileAsNode, svgFilesFromDataTransfer, type SvgNode } from "@skriva/extension-svg";
+import {
+  readSvgFileAsNode,
+  SvgExtension as SvgEnrichment,
+  svgFilesFromDataTransfer,
+  type SvgNode,
+} from "@skriva/extension-svg";
+import { Extension } from "@skriva/core";
 import type { DragEvent } from "react";
+import { createSkrivaTiptapExtension } from "../enrichment.ts";
+
+export {
+  createSvgExtension,
+  createSvgNode,
+  createSvgNodeFromElement,
+  createSvgNodeFromSource,
+  readSvgFileAsNode,
+  svgFilesFromDataTransfer,
+  type SvgExtensionOptions,
+  type SvgExtensionRenderers,
+  type SvgImportOptions,
+  type SvgNode,
+  type SvgPathSpec,
+  type SvgProps,
+} from "@skriva/extension-svg";
 
 export type SvgDropHandlerOptions = {
   addNodes: (nodes: SvgNode[]) => void;
@@ -29,3 +49,12 @@ export function createSvgDropHandler(options: SvgDropHandlerOptions): SvgSurface
     },
   };
 }
+
+export const Svg = createSkrivaTiptapExtension(
+  Extension.create({
+    name: "svg",
+  }),
+  { skriva: [SvgEnrichment] },
+);
+
+export const SvgExtension = Svg;

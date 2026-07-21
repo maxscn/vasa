@@ -4,8 +4,8 @@ import {
   createFontRegistry,
   createNativeFont,
   googleFontManifest,
-} from "@opeinspection/skriva/font";
-import { registerEditorFonts } from "@opeinspection/skriva";
+} from "@openinspection/skriva/font";
+import { registerEditorFonts } from "@openinspection/skriva/font";
 import { webEditorConfig } from "../src/editor-config.ts";
 
 test("keeps the web editor Google font catalog available", () => {

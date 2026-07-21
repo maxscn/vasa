@@ -1,6 +1,7 @@
 import type { ClipboardEvent, FormEvent, KeyboardEvent, MutableRefObject } from "react";
 import {
   type BrowserInputAdapter,
+  type HeadlessEditorInteraction,
   type JSONContent,
   type EditorRenderLineDocument,
   type EditorRenderLineOptions,
@@ -8,7 +9,7 @@ import {
   type SkrivaDeleteIntent,
   type SkrivaShortcut,
   type SkrivaSurfaceAdapter,
-} from "../src/index.ts";
+} from "../src/internal.ts";
 import {
   applyEditorKeymap,
   defaultEditorKeymap,
@@ -32,6 +33,7 @@ export type UseEditorInputOptions = {
   toggleMark: EditorKeymapOptions["toggleMark"];
   toggleBlockquote: () => void;
   setBlockType: EditorKeymapOptions["setBlockType"];
+  reduceInteraction?: (interaction: HeadlessEditorInteraction) => boolean;
 };
 
 export function useEditorInput(options: UseEditorInputOptions) {
@@ -127,6 +129,7 @@ export function useEditorInput(options: UseEditorInputOptions) {
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (handleHeadlessKeyDown(event)) return;
     if (handleSurfaceKeyDown(event)) return;
     if (!isLegacyMovementKey(event)) return;
 
@@ -152,7 +155,31 @@ export function useEditorInput(options: UseEditorInputOptions) {
     );
   }
 
+  function handleHeadlessKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!shouldReduceHeadlessKeyboardEvent(event)) return false;
+
+    const handled =
+      options.reduceInteraction?.({
+        type: "keyboard",
+        combo: {
+          key: event.key,
+          ctrlKey: event.ctrlKey,
+          metaKey: event.metaKey,
+          altKey: event.altKey,
+          shiftKey: event.shiftKey,
+        },
+      }) ?? false;
+    if (!handled) return false;
+
+    event.preventDefault();
+    if (event.key === "Backspace") suppressBeforeInput("deleteContentBackward");
+    if (event.key === "Delete") suppressBeforeInput("deleteContentForward");
+    return true;
+  }
+
   function handleSurfaceKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (isNativeBrowserShortcut(event)) return false;
+
     if (event.key === "Backspace") {
       event.preventDefault();
       suppressBeforeInput("deleteContentBackward");
@@ -210,6 +237,37 @@ export function useEditorInput(options: UseEditorInputOptions) {
 }
 
 export type UseEditorInputReturn = ReturnType<typeof useEditorInput>;
+
+function shouldReduceHeadlessKeyboardEvent(event: KeyboardEvent<HTMLTextAreaElement>) {
+  const key = event.key.toLowerCase();
+  if (key === "arrowleft" || key === "arrowright") return true;
+  if (
+    (key === "arrowup" || key === "arrowdown") &&
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey
+  ) {
+    return true;
+  }
+  if (key === "a" && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey) {
+    return true;
+  }
+  if (key === "b" && (event.ctrlKey || event.metaKey) && !event.altKey) return true;
+  if (key === "u" && (event.ctrlKey || event.metaKey) && !event.altKey) return true;
+  if (key === "z" && (event.ctrlKey || event.metaKey) && !event.altKey) return true;
+  if (key === "backspace" || key === "delete") return true;
+  return false;
+}
+
+export function isNativeBrowserShortcut(
+  event: Pick<
+    KeyboardEvent<HTMLTextAreaElement>,
+    "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey"
+  >,
+) {
+  const key = event.key.toLowerCase();
+  if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return false;
+  return key === "c" || key === "x" || key === "v" || key === "r";
+}
 
 function shortcutForEvent(event: KeyboardEvent<HTMLTextAreaElement>): SkrivaShortcut | undefined {
   if (!(event.ctrlKey || event.metaKey || event.altKey)) return undefined;

@@ -17,7 +17,7 @@ import {
   type EditorRenderLineDocument,
   type EditorRenderLineOptions,
 } from "../src/interaction.ts";
-import { type JSONContent, type EditorSelection } from "../src/index.ts";
+import { type JSONContent, type EditorSelection } from "../src/internal.ts";
 
 type EditorKeymapEvent = KeyboardEvent<HTMLTextAreaElement>;
 

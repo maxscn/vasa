@@ -1,8 +1,8 @@
-import { HorizontalRule } from "@opeinspection/skriva/enrichments/horizontal-rule";
-import { createSvgNode, SvgExtension } from "@opeinspection/skriva/enrichments/svg";
-import { TableExtension } from "@opeinspection/skriva/enrichments/table";
-import type { SkrivaEditorConfig } from "@opeinspection/skriva";
-import { arimoFallbackFont, arimoRegularFont } from "@opeinspection/skriva/font";
+import { HorizontalRule } from "@openinspection/skriva/enrichments/horizontal-rule";
+import { createSvgNode, SvgExtension } from "@openinspection/skriva/enrichments/svg";
+import { TableExtension } from "@openinspection/skriva/enrichments/table";
+import type { SkrivaEditorConfig } from "@openinspection/skriva/editor/react";
+import { arimoFallbackFont, arimoRegularFont } from "@openinspection/skriva/font";
 import {
   localArimoRegularFontSource,
   localControlledGoogleFontFamilies,

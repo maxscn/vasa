@@ -1,5 +1,5 @@
 {
-  "name": "@opeinspection/skriva",
+  "name": "@openinspection/skriva",
   "version": "0.0.0",
   "description": "A starter for creating a TypeScript package.",
   "homepage": "https://github.com/author/library#readme",
@@ -19,17 +19,18 @@
   "exports": {
     ".": "./dist/index.mjs",
     "./canvas": "./dist/canvas.mjs",
+    "./editor/react": "./dist/editor/react.mjs",
     "./enrichment": "./dist/enrichment.mjs",
     "./enrichments/horizontal-rule": "./dist/enrichments/horizontal-rule.mjs",
     "./enrichments/line-height": "./dist/enrichments/line-height.mjs",
+    "./enrichments/starter": "./dist/enrichments/starter.mjs",
     "./enrichments/svg": "./dist/enrichments/svg.mjs",
     "./enrichments/table": "./dist/enrichments/table.mjs",
     "./font": "./dist/font.mjs",
     "./headless": "./dist/headless.mjs",
     "./layout": "./dist/layout.mjs",
     "./pdf": "./dist/pdf.mjs",
-    "./react": "./dist/react.mjs",
-    "./renderer": "./dist/renderer.mjs",
+    "./scene": "./dist/scene.mjs",
     "./package.json": "./package.json"
   },
   "publishConfig": {

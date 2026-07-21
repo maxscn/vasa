@@ -10,7 +10,7 @@ import {
   type EditorSelection,
   type EditorSelectionPoint,
   type SkrivaSurfaceAdapter,
-} from "../src/index.ts";
+} from "../src/internal.ts";
 import { hitTestCanvas } from "../src/browser.ts";
 
 type CanvasClickSequence = {
